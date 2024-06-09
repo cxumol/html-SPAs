@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<!-- https://ffmpeg-cut-cmd.glitch.me/ -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FFmpeg Command Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #drop-area {
+            border: 2px dashed #ccc;
+            border-radius: 20px;
+            width: 100%;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: background 0.3s;
+        }
+        #drop-area.dragover {
+            background-color: #e9e9e9;
+        }
+        #timeline {
+            border: 1px solid #ccc;
+            height: 100px;
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .breakpoint {
+            width: 10px;
+            height: 100%;
+            background-color: red;
+            position: absolute;
+            cursor: pointer;
+        }
+        .timecode {
+            position: absolute;
+            top: 0;
+            font-size: 12px;
+            background: white;
+            border: 1px solid #ccc;
+            padding: 2px;
+        }
+        #total-duration {
+            position: absolute;
+            right: 0;
+            bottom: -20px;
+            font-size: 12px;
+        }
+        #controls {
+            margin-bottom: 20px;
+        }
+        #commands {
+            width: 100%;
+            height: 200px;
+        }
+    </style>
+</head>
+<body>
+    <h1>FFmpeg Command Generator</h1>
+    <div id="drop-area">
+        Drag and drop media file here
+    </div>
+    <div id="timeline">
+        <div id="total-duration"></div>
+    </div>
+    <div id="controls">
+        <button id="add-breakpoint">Add Breakpoint</button>
+        <button id="remove-breakpoint">Remove Last Breakpoint</button>
+    </div>
+    <textarea id="commands" readonly></textarea>
+    <button id="copy-commands">Copy Commands</button>
+  <p>Give me a star on GitHub <a href="https://github.com/cxumol/html-SPAs">https://github.com/cxumol/html-SPAs</a></p>
+    <script>
+        let breakpoints = [];
+        let mediaDuration = 0;
+        let mediaFileName = '';
+        const dropArea = document.getElementById('drop-area');
+        const timeline = document.getElementById('timeline');
+        const commandsTextarea = document.getElementById('commands');
+        const totalDurationElement = document.getElementById('total-duration');
+
+        dropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropArea.classList.add('dragover');
+        });
+
+        dropArea.addEventListener('dragleave', () => {
+            dropArea.classList.remove('dragover');
+        });
+
+        dropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && (file.type.startsWith('video/') || file.type.startsWith('audio/'))) {
+                const url = URL.createObjectURL(file);
+                const media = document.createElement(file.type.startsWith('video/') ? 'video' : 'audio');
+                media.src = url;
+                media.addEventListener('loadedmetadata', () => {
+                    mediaDuration = media.duration;
+                    mediaFileName = file.name;
+                    totalDurationElement.textContent = formatTime(mediaDuration);
+                    alert(`Loaded media: ${file.name} with duration ${mediaDuration.toFixed(2)} seconds`);
+                });
+            } else {
+                alert('Unsupported file type. Please drop a video or audio file.');
+            }
+        });
+
+        document.getElementById('add-breakpoint').addEventListener('click', () => {
+            const breakpoint = document.createElement('div');
+            const timecode = document.createElement('div');
+            timecode.className = 'timecode';
+            timecode.textContent = '00:00:00';
+            breakpoint.className = 'breakpoint';
+            breakpoint.appendChild(timecode);
+            timeline.appendChild(breakpoint);
+            makeDraggable(breakpoint);
+            breakpoints.push(breakpoint);
+            updateCommands();
+        });
+
+        document.getElementById('remove-breakpoint').addEventListener('click', () => {
+            if (breakpoints.length > 0) {
+                const breakpoint = breakpoints.pop();
+                timeline.removeChild(breakpoint);
+                updateCommands();
+            }
+        });
+
+        document.getElementById('copy-commands').addEventListener('click', () => {
+            commandsTextarea.select();
+            document.execCommand('copy');
+            alert('Commands copied to clipboard');
+        });
+
+        function makeDraggable(element) {
+            element.addEventListener('mousedown', (e) => {
+                const onMouseMove = (e) => {
+                    const rect = timeline.getBoundingClientRect();
+                    let x = e.clientX - rect.left;
+                    if (x < 0) x = 0;
+                    if (x > rect.width - element.offsetWidth) x = rect.width - element.offsetWidth;
+                    element.style.left = `${x}px`;
+                    const timecode = element.querySelector('.timecode');
+                    const seconds = (parseFloat(element.style.left) / rect.width) * mediaDuration;
+                    timecode.textContent = formatTime(seconds);
+                    updateCommands();
+                };
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', () => {
+                    document.removeEventListener('mousemove', onMouseMove);
+                }, { once: true });
+            });
+        }
+
+        function updateCommands() {
+            if (mediaDuration > 0) {
+                const rect = timeline.getBoundingClientRect();
+                const commands = breakpoints.map((breakpoint, index) => {
+                    const startTime = (parseFloat(breakpoint.style.left) / rect.width) * mediaDuration;
+                    const endTime = index < breakpoints.length - 1 ?
+                        (parseFloat(breakpoints[index + 1].style.left) / rect.width) * mediaDuration :
+                        mediaDuration;
+                    const extension = mediaFileName.split('.').pop();
+                    return `ffmpeg -ss ${formatTime(startTime)} -to ${formatTime(endTime)} -accurate_seek -i "${mediaFileName}" -codec copy "output${index}.${extension}"`;
+                }).join('\n');
+                commandsTextarea.value = commands;
+            }
+        }
+
+        function formatTime(seconds) {
+            const date = new Date(seconds * 1000);
+            const hh = String(date.getUTCHours()).padStart(2, '0');
+            const mm = String(date.getUTCMinutes()).padStart(2, '0');
+            const ss = String(date.getUTCSeconds()).padStart(2, '0');
+            return `${hh}:${mm}:${ss}`;
+        }
+    </script>
+</body>
+</html>
