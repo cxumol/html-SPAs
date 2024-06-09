@@ -166,7 +166,10 @@
                         (parseFloat(breakpoints[index + 1].style.left) / rect.width) * mediaDuration :
                         mediaDuration;
                     const extension = mediaFileName.split('.').pop();
-                    return `ffmpeg -ss ${formatTime(startTime)} -to ${formatTime(endTime)} -accurate_seek -i "${mediaFileName}" -codec copy "output${index}.${extension}"`;
+                    const baseName = mediaFileName.substring(0, mediaFileName.lastIndexOf('.'));
+                    const zeroPaddedIndex = String(index).padStart(3, '0');
+                    const outputFileName = `${baseName}_${zeroPaddedIndex}.${extension}`;
+                    return `ffmpeg -ss ${formatTime(startTime)} -to ${formatTime(endTime)} -accurate_seek -i "${mediaFileName}" -codec copy "${outputFileName}"`;
                 }).join('\n');
                 commandsTextarea.value = commands;
             }
