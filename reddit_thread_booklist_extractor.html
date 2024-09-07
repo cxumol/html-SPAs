@@ -1,42 +1,42 @@
 <!DOCTYPE html><html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>get book list from a reddit thread</title>
-    <link rel="stylesheet" href="https://unpkg.com/mvp.css">
-  </head>
-  <body>
-    <h1>get book list from a reddit thread</h1>
-    <div style="display:flex;">
-      <input id="input" type="text" placeholder="put reddit link here..."/>
-      <button id="go-btn" onclick="go();">Go</button>
-    </div>
-    <small>example input: https://old.reddit.com/r/ProgressionFantasy/comments/1f6dw5o/new_monthly_book_release_announcement_thread/</small>
-    <div id="result"></div>
-    <script>
-    var go=()=>{
-      var SYS_INST=`You are content extractor. Your task is to extract all book mentions from given document. Your output format is\n[{"book":"",author:"",url:""},...]\nfollowing JSON schema sctrictly and leaving not-mentioned fields as blank string.`;
-      var USER_INST=``;
-      var link=document.getElementById('input').value.trim().replace("https://www.","https://old.").replace("https://old.","https://cors.eu.org/https://old.");
-      fetch(link).then(r=>r.text()).then(t=>{
-        USER_INST=t.slice(t.indexOf(`role="main"`));
-        fetch('https://deepinfra.kici.me/v1/chat/completions', { //BRYK
-        method: 'POST',
-        headers: { Authorization: 'Bearer sk-linuxdo', 'Content-Type': 'application/json' }, //BRYK
-        body: JSON.stringify({
-          model: "meta-llama/Meta-Llama-3.1-8B-Instruct",
-          messages: [{ role: 'system', content: SYS_INST },
-                     { role: 'user', content: USER_INST }]
-          })
-        }).then(r=>r.json()).then(r=>{
-          var j=r.choices[0].message.content.match(/\[.*\]/g)[0];
-          JSON.parse(j).forEach(e=>{
-            var l = Object.entries(e).map((v)=>`<li><small>${v[0]}:</small> ${v[1]}</li>`).join('\n');
-            document.getElementById('result').innerHTML+=`<ul>${l}</ul>`
-          })
-        });
-      });  
-    }
-    </script>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>get book list from a reddit thread</title>
+  <link rel="stylesheet" href="https://unpkg.com/mvp.css">
+</head>
+<body>
+  <h1>get book list from a reddit thread</h1>
+  <div style="display:flex;">
+    <input id="input" type="text" placeholder="put reddit link here..."/>
+    <button id="go-btn" onclick="go();">Go</button>
+  </div>
+  <small>example input: https://old.reddit.com/r/ProgressionFantasy/comments/1f6dw5o/new_monthly_book_release_announcement_thread/</small>
+  <div id="result"></div>
+  <script>
+  var go=()=>{
+    var SYS_INST=`You are content extractor. Your task is to extract all book mentions from given document. Your output format is\n[{"book":"",author:"",url:""},...]\nfollowing JSON schema sctrictly and leaving not-mentioned fields as blank string.`;
+    var USER_INST=``;
+    var link=document.getElementById('input').value.trim().replace("https://www.","https://old.").replace("https://old.","https://cors.eu.org/https://old.");
+    fetch(link).then(r=>r.text()).then(t=>{
+      USER_INST=t.slice(t.indexOf(`role="main"`));
+      fetch('https://deepinfra.kici.me/v1/chat/completions', { //BRYK
+      method: 'POST',
+      headers: { Authorization: 'Bearer sk-linuxdo', 'Content-Type': 'application/json' }, //BRYK
+      body: JSON.stringify({
+        model: "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        messages: [{ role: 'system', content: SYS_INST },
+                   { role: 'user', content: USER_INST }]
+        })
+      }).then(r=>r.json()).then(r=>{
+        var j=r.choices[0].message.content.match(/\[.*\]/g)[0];
+        JSON.parse(j).forEach(e=>{
+          var l = Object.entries(e).map((v)=>`<li><small>${v[0]}:</small> ${v[1]}</li>`).join('\n');
+          document.getElementById('result').innerHTML+=`<ul>${l}</ul>`
+        })
+      });
+    });  
+  }
+  </script>
+</body>
 </html>
