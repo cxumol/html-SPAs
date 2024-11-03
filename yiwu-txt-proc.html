@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" /><meta charset="utf-8" />
+  <title>Text Processor</title>
+  <link rel="stylesheet" href="https://unpkg.com/mvp.css">
+  <style>
+    main { display: flex; }
+    textarea { width: calc(50% - 1em); height: 300px; margin: 0.5em; resize: vertical; }
+    #copyButton { background-color: #ccc; } /* Initial gray color */
+    #copyButton.active { background-color: #4CAF50; color: white; }  /* Green when active */
+  </style>
+</head>
+
+<body>
+  <main>
+    <textarea id="inputArea" ondrop="dropHandler(event)" ondragover="dragOverHandler(event)"
+      placeholder="输入文本或拖拽文件到这里"></textarea>
+    <textarea id="outputArea" readonly></textarea>
+  </main>
+  <button id="go" onclick="processText()">Go</button>
+  <button id="copyButton" onclick="copyResult()" disabled>Copy Result</button>
+
+  <script>
+    // var BASE="https://api.afreeapi.me/v1";
+    // var KEY="c25haWx5cC9ibGFja2JveDJhcGk6bGF0ZXN0";
+    // var MOD="gpt-4o";
+    var BASE="https://api.smnet.asia/v1";
+    var KEY="sk-n2HVNbAl3VWjiT29Fc2b1c0eD3914aEeA7B232E72f7f291c";
+    var MOD="gpt-4o-mini";
+    var INTERVAL = 1000;
+    var SYSTEM_PROMPT = `将输入文本转为务实速记: 极度精简, 去除冗词赘词, 去除官腔废话, 引述转直述, 纯 txt 无 markdown
+例如 "香港和台湾与中国内地的文化紧密联系" -> "港台内地文化紧密联系"
+例如 "对话者讨论了现代小说中环境描写和人物刻画的减少现象，认为这与作者、读者偏好及阅读平台的限制有关。" -> "现代小说中环境描写和人物刻画的减少，与作者、读者偏好及手机阅读有关。"
+例如 "在暗光下，这种响应较强，而在亮光下则显著减弱，表明其具备自适应能力。" -> "该响应在暗光下强, 亮光下弱, 可自适应"`;
+    var getId = id => document.getElementById(id);
+    var inputArea = getId('inputArea'), outputArea = getId('outputArea'), copyButton = getId('copyButton');
+
+    var processText = () => {
+      var text = inputArea.value;
+      outputArea.value = text.replace(/(-   \d{2,3}.*\n\n)(.*)/g, (match, p1, p2) => {
+        var userPrompt = p2.trim();
+        console.log(`Original Text:\n${userPrompt}\n`); // Keep this line for logging
+
+        fetch(BASE+'/chat/completions', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer '+KEY,'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: MOD,
+            messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: userPrompt }]
+          })
+        })
+          .then(response => response.json())
+          .then(data => {
+             var aiResponse = data.choices[0].message.content.trim();
+          console.log(`AI Resp:${aiResponse}\n`);
+             
+             outputArea.value = outputArea.value.replace(match, `${p1}${aiResponse}`) // replace with the appropriate values
+          })
+        return match; // Return the original match initially, update asynchronously after response
+      });
+
+      copyButton.disabled = false;
+      copyButton.classList.add('active');
+    };
+
+    var copyResult = () => { navigator.clipboard.writeText(outputArea.value); }
+    var dropHandler = ev => { ev.preventDefault(); var file = ev.dataTransfer.files[0]; var reader = new FileReader(); reader.onload = e => inputArea.value = e.target.result; reader.readAsText(file); }
+    var dragOverHandler = ev => ev.preventDefault();
+
+  </script>
+</body>
+
+</html>
