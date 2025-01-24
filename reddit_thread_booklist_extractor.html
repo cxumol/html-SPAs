@@ -20,9 +20,9 @@
     var link=document.getElementById('input').value.trim().replace("https://www.","https://old.").replace("https://old.","https://cors.eu.org/https://old.");
     fetch(link).then(r=>r.text()).then(t=>{
       USER_INST=t.slice(t.indexOf(`role="main"`));
-      fetch('https://deepinfra.kici.me/v1/chat/completions', { //BRYK
+      fetch('https://api.example.com/v1/chat/completions', { //BRYK
       method: 'POST',
-      headers: { Authorization: 'Bearer sk-linuxdo', 'Content-Type': 'application/json' }, //BRYK
+      headers: { Authorization: 'Bearer sk-', 'Content-Type': 'application/json' }, //BRYK
       body: JSON.stringify({
         model: "meta-llama/Meta-Llama-3.1-8B-Instruct",
         messages: [{ role: 'system', content: SYS_INST },
