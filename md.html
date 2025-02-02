@@ -9,7 +9,7 @@
     var $=q=>document.querySelector(q);
     var main = $('main');
     var fUrl = new URLSearchParams(window.location.search).get('f');
-    if (!fUrl) main.innerHTML = '<p>Append markdown URL in addressbar like this <code>?f=http://example.com/README.md</code></p>';
+    if (!fUrl) main.innerHTML = '<p>Enter markdown URL: <input id="urlInput" type="text"><button id="goBtn" onclick="go();">Go</button></p>';
     else window.markdown.ready.then(markdown => fetch(fUrl).then(r=>r.text())
           .then(txt => {let txt_=setupTitle(txt); main.innerHTML = window.markdown.parse(txt_); }
         ).catch(er => main.innerHTML = `<p>Error fetching markdown from <a href="${fUrl}">${fUrl}</a>: ${er}</p>`)
@@ -22,6 +22,9 @@
       if (fUrl.indexOf('dpaste.com')!==-1) {let id=fUrl.split("/").pop().split(".").shift();
                                             fetch('https://cors.eu.org/https://dpaste.com/api/item_detail/'+id+'/').then(r=>r.json()).then(j=>setTitle(j[id].title));
                                            return txt;}
+    }
+    var go =()=> { let url = $('#urlInput').value;
+      if (url) window.location.href = window.location.href.split('?')[0] + '?f=' + encodeURIComponent(url);
     }
   </script>
 </body>
