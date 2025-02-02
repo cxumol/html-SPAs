@@ -23,7 +23,7 @@
                                             fetch('https://cors.eu.org/https://dpaste.com/api/item_detail/'+id+'/').then(r=>r.json()).then(j=>setTitle(j[id].title));
                                            return txt;}
     }
-    var go =()=> { let url = $('#urlInput').value;
+    var go =()=> { let url = $('#urlInput').value; if(url.endsWith('-preview'))url=url.slice(0,-8)+'.txt'; // eg: https://dpaste.com/FPR6XVRRM-preview => https://dpaste.com/FPR6XVRRM.txt
       if (url) window.location.href = window.location.href.split('?')[0] + '?f=' + encodeURIComponent(url);
     }
   </script>
