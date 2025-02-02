@@ -1,0 +1,28 @@
+<!DOCTYPE html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1" /><meta charset="utf-8" />
+  <title>Markdown Viewer</title>
+  <link rel="stylesheet" href="https://unpkg.com/concrete.css">
+</head><body>
+  <h1></h1>
+  <main>Loading...</main>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-wasm@1.2.0/dist/markdown.min.js"></script>
+  <script>
+    var $=q=>document.querySelector(q);
+    var main = $('main');
+    var fUrl = new URLSearchParams(window.location.search).get('f');
+    if (!fUrl) main.innerHTML = '<p>Append markdown URL in addressbar like this <code>?f=http://example.com/README.md</code></p>';
+    else window.markdown.ready.then(markdown => fetch(fUrl).then(r=>r.text())
+          .then(txt => {let txt_=setupTitle(txt); main.innerHTML = window.markdown.parse(txt_); }
+        ).catch(er => main.innerHTML = `<p>Error fetching markdown from <a href="${fUrl}">${fUrl}</a>: ${er}</p>`)
+      ).catch(er => main.innerHTML = `<p>Error loading markdown-wasm: ${er}</p>`);
+    
+    var setTitle=s=>document.title=$('h1').textContent=s;
+    var setupTitle=txt=>{
+      if (txt.startsWith("# ")) { setTitle(txt.split('\n')[0].slice(2));
+                                  return txt.slice(txt.indexOf('\n')+1)}
+      if (fUrl.indexOf('dpaste.com')!==-1) {let id=fUrl.split("/").pop().split(".").shift();
+                                            fetch('https://cors.eu.org/https://dpaste.com/api/item_detail/'+id+'/').then(r=>r.json()).then(j=>setTitle(j[id].title));
+                                           return txt;}
+    }
+  </script>
+</body>
+</html>
