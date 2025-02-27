@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>硅基流动 key 批量检测 | siliconflow key checker</title>
+  <style>
+    body { font-family: sans-serif; }
+    #results { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    textarea { width: 100%;  }
+    pre { margin: 0; }
+  </style>
+</head>
+<body>
+  <h1><a href="https://cloud.siliconflow.cn/i/FCmPLrM2">硅基流动 key 批量检测 | siliconflow key checker</a></h1>
+  <textarea id="keys" oninput="dynH(this)"></textarea>
+  <button onclick="go()"> GO </button>
+  
+  <div id="results">
+    <div><pre id="positive"></pre></div>
+    <div><pre id="balances"></pre></div>
+  </div>
+  <hr/>
+    <pre id="zero"></pre>
+  <hr/>
+  see also <a href="http://siliconflow.xzin.top/">siliconflow.xzin.top</a>
+  <script>
+    var $=document.querySelector.bind(document);
+    var dynH=(e)=>{e.style.height="";e.style.height=e.scrollHeight+"px"};
+    var go=async()=>{
+        var keys=$("#keys").value;
+        var r=await fetch("https://sf-sk-check.deno.dev/",{method:"POST",headers:{Authorization:"Bearer check-keys"},body:keys});
+        if(!r.ok){alert("Error: "+r.status);return;}
+        var j=await r.json();
+        var positive=[],balances=[],zero=[];
+        j.list.forEach(d=>{if(!d)return;
+          if(d.totalBalance>0){
+              positive.push(d.key);
+              balances.push(`${d.balance}+${d.chargeBalance}`);
+          }else{zero.push(d.key);}
+        });
+        $("#positive").textContent=positive.join('\n');
+        $("#balances").textContent=balances.join('\n');
+        $("#zero").textContent=zero.join('\n')+'\n\n'+j.errs;
+    }
+  </script>
+</body>
+</html>
