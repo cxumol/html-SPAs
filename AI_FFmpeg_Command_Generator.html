@@ -1,0 +1,68 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" /><meta charset="utf-8" />
+  <title>AI ffmpeg Command Generator</title>
+  <link rel="stylesheet" href="https://dohliam.github.io/dropin-minimal-css/min/paper.min.css">
+  <style>
+    main { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; }
+    .buttons { display: flex; flex-direction: column; align-items: center; justify-content: center;}
+    textarea { height: 300px; resize: vertical; }
+    #copyBtn { background-color: #ccc; }
+    #copyBtn.active { background-color: #4CAF50; color: white; }
+    #apiConfig { height: 100px; }
+  </style>
+</head><body>
+  <header>
+    <h3>AI ffmpeg Command Generator</h3>
+  </header>
+<main>
+  <textarea id="inputArea" placeholder="Drag-in to add file name" ondrop="dropHandler(event)" ondragover="dragOverHandler(event)"></textarea>
+  <div class="buttons">
+      <button id="goBtn" onclick="main()">Go</button>
+      <button id="copyBtn" onclick="copyOutput()" disabled>Copy Output</button>
+  </div>
+  <textarea id="outputArea" placeholder="Output" readonly></textarea>
+  <textarea id="apiConfig">{"base": "https://api.example/v1",
+  "key": "sk-",
+  "model": "gpt"}</textarea>
+</main>
+<script>
+  var eid=id=>document.getElementById(id);
+  var inputArea=eid('inputArea'), outputArea=eid('outputArea'), copyBtn=eid('copyBtn'), apiConfigArea=eid('apiConfig');
+  var copyOutput=()=>{navigator.clipboard.writeText(outputArea.value);};
+  var dropHandler=ev=>{ev.preventDefault();inputArea.value +=` "${ev.dataTransfer.files[0].name}" `;},dragOverHandler=ev=>ev.preventDefault();
+  var _api={base:'https://api.example/v1',key:'sk-',model:'gpt-100'};
+  var oai=async(api,msg,t=0.6)=>await fetch(api.base+'/chat/completions',{method:'POST',headers:{'Authorization':'Bearer '+api.key,'Content-Type':'application/json'},body:JSON.stringify({"model":api.model,"messages":msg,temperature:t})}).then(r=>r.json()).then(j=>{var a=j.choices?.[0]?.message?.content.trim();if(!a)throw j;return a;}).catch(e=>e.message);
+  var main=async()=>{
+    var userPrompt=inputArea.value;
+    var api={..._api,...JSON.parse(apiConfigArea.value||'{}')};
+    var messages=[{"role":"system","content":`Generate ffmpeg commands based on user input. shortcodes are:
+cut => ffmpeg -ss START -to END -accurate_seek -i "fname.ext" -codec copy -avoid_negative_ts 1 "fname.ext"  (START defaults to 00:00:00, END defaults to 11:59:59, time in hh:mm:ss)
+a => demux to audio,best guess output ext (mp4->m4a,webm->ogg etc.)
+v => demux to video,best guess output ext
+265 => -i "fname.ext" -c:v libx265 -c:a copy "fname.x265.ext"
+concat => -i input1.wav -i input2.wav -filter_complex "[0:0][1:0]concat=n=2:v=0:a=1[out]" -map "[out]" for wav ; -i "concat:input1.ts|input2.ts|input3.ts" for ts; for others have to use filelist.txt, first give command to generate txt under cmd.exe and bash, and then give concat command)
+seg => ffmpeg -i "fname with space.ext" -f segment -segment_time SEGMENT_TIME -reset_timestamps 1 -c copy "fname with space"_%03d.ext (SEGMENT_TIME in hh:mm:ss)
+Output the command only,no extra text. Keep it concise,minimal spaces.`},
+    {"role":"user","content":"cut example1.mp4 till 1m30s"},{"role":"assistant","content":`ffmpeg -ss 00:00:00 -to 00:01:30 -accurate_seek -i "example1.mp4" -codec copy -avoid_negative_ts 1 "example1.cut.mp4"`},
+    {"role":"user","content":"cut example1.mp4 from 1010"},{"role":"assistant","content":`ffmpeg -ss 00:10:10 -to 11:59:59 -accurate_seek -i "example1.mp4" -codec copy -avoid_negative_ts 1 "example1.cut.mp4"`},
+    {"role":"user","content":"a example2.mp4"},{"role":"assistant","content":`ffmpeg -i "example2.mp4" -vn -acodec copy "example2.m4a"`},
+    {"role":"user","content":"265 带空格 文 件 名.mp4"},{"role":"assistant","content":`ffmpeg -i "带空格 文 件 名.mp4" -c:v libx265 -c:a copy "带空格 文 件 名.x265.mp4"`},
+    {"role":"user","content":"concat file3.wav file4.wav"},{"role":"assistant","content":`ffmpeg -i "file3.wav" -i "file4.wav" -filter_complex "[0:0][1:0]concat=n=2:v=0:a=1[out]" -map "[out]" file3+4.wav`},
+    {"role":"user","content":userPrompt}
+    ];
+    outputArea.value = 'Generating...';
+    copyBtn.disabled = true;
+    var resp = await oai(api, messages);
+    outputArea.value = resp || "Failed. Try again?";
+    copyBtn.classList.add('active');
+  };
+  </script><footer>
+      <p>example input : output</p>
+<p><code>cut example1.mp4 till 1m30s</code> : <code>ffmpeg -ss 00:00:00 -to 00:01:30 -accurate_seek -i "example1.mp4" -codec copy -avoid_negative_ts 1 "example1.cut.mp4"</code></p>
+<p><code>cut example1.mp4 from 1010</code> : <code>ffmpeg -ss 00:10:10 -to 11:59:59 -accurate_seek -i "example1.mp4" -codec copy -avoid_negative_ts 1 "example1.cut.mp4"</code></p>
+<p><code>a example2.mp4</code> : <code>ffmpeg -i "example2.mp4" -vn -acodec copy "example2.m4a"</code></p>
+<p><code>265 带空格 文 件 名.mp4</code> : <code>ffmpeg -i "带空格 文 件 名.mp4" -c:v libx265 -c:a copy "带空格 文 件 名.x265.mp4"</code></p>
+<p><code>concat file3.wav file4.wav</code> : <code>ffmpeg -i "file3.wav" -i "file4.wav" -filter_complex "[0:0][1:0]concat=n=2:v=0:a=1[out]" -map "[out]" file3+4.wav</code></p>
+
+  </footer>
+</body></html>
