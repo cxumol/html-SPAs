@@ -1,0 +1,93 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" /><meta charset="utf-8" />
+  <title>AI Format Converter</title>
+  <link rel="stylesheet" href="https://dohliam.github.io/dropin-minimal-css/min/clmaterial.min.css">
+  <style>
+    main { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; }
+    .buttons { display: flex; flex-direction: column; align-items: center; justify-content: center;}
+    textarea { height: 200px; resize: vertical; }
+    #copyBtn { background-color: #ccc; }
+    #copyBtn.active { background-color: #4CAF50; color: white; }
+    #apiConfig { height: 100px; }
+    #templates-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(10em, 20em)); gap: 5px; justify-content: space-between; }
+    .per-template { display: flex; flex-direction: column; }
+  </style>
+</head><body><header>
+    <h3>AI Format Converter</h3>
+  </header>
+<main>
+  <textarea id="inputArea" placeholder="Input Data"></textarea>
+  <div class="buttons">
+      <button id="goBtn" onclick="main()">Go</button>
+      <button id="copyBtn" onclick="copyOutput()" disabled>Copy Output</button>
+  </div>
+  <textarea id="outputArea" placeholder="Output" readonly></textarea>
+  <div class="textarea-with-lable">
+    <lable>Format Target: </lable>
+    <textarea id="formatTargetArea">var BASE="https://api.example/v1", KEY="sk-", MOD="gpt";</textarea>
+  </div>
+  <div class="textarea-with-lable">
+    <lable>API config JSON</lable>
+    <textarea id="apiConfig">{"base": "https://api.example.com/v1",
+    "key": "sk-",
+    "model": "gpt"}</textarea>
+  </div>
+
+  
+</main>
+
+
+<div id="templates-container"></div>
+  
+<template id="template-per-template">
+    <div class="per-template">
+        <lable></lable>
+        <textarea></textarea>
+        <button class="templateBtn">Apply</button>
+    </div>
+</template>
+
+<script>
+  var $=id=>document.getElementById(id);
+  var inputArea=$('inputArea'), outputArea=$('outputArea'), copyBtn=$('copyBtn'), apiConfigArea=$('apiConfig'), formatTargetArea=$('formatTargetArea');
+  var copyOutput=()=>{navigator.clipboard.writeText(outputArea.value);};
+  var _api={base:'https://api.example.com/v1',key:'sk-example',model:'Qwen/Qwen2.5-Coder-7B-Instruct'}; // THUDM/glm-4-9b-chat Qwen/Qwen2.5-Coder-7B-Instruct 
+  var oai=async(api,msg,t=0.6)=>await fetch(api.base+'/chat/completions',{method:'POST',headers:{'Authorization':'Bearer '+api.key,'Content-Type':'application/json'},body:JSON.stringify({"model":api.model,"messages":msg,temperature:t})}).then(r=>r.json()).then(j=>{var a=j.choices?.[0]?.message?.content.trim();if(!a)throw j;return a;}).catch(e=>e.message);
+  var main=async()=>{
+    var userPrompt=inputArea.value;
+    var formatTarget = formatTargetArea.value;
+    var api={..._api,...JSON.parse(apiConfigArea.value||'{}')};
+    var messages=[{"role":"system","content":`Convert the input data to the specified format. Output the converted data only, no extra text.`},
+    {"role":"user","content":`input:\n${userPrompt}\n\nformat:\n${formatTarget}`},
+    ];
+    outputArea.value = 'Generating...';
+    copyBtn.disabled = true;
+    var resp = await oai(api, messages);
+    outputArea.value = resp || "Failed. Try again?";
+    copyBtn.classList.add('active');
+    copyBtn.disabled=false;
+  };
+  var applyTemplate=btn=>formatTargetArea.value=btn.parentNode.querySelector('textarea').value;
+
+  var templatesData = [
+    { label: "JSON template", content: '{"base":"https://api.example/v1","key":"sk-","model":"gpt"}' },
+    { label: "JS template", content: 'var BASE="https://api.example/v1", KEY="sk-", MOD="gpt";' },
+    { label: "PY template", content: 'BASE = "https://api.example/v1"\nKEY = "sk-"\nMODEL = "gpt"' },
+    { label: "CLI template", content: "--api_base https://api.example.com/v1 --openai_key sk- --model_list gpt" },
+    { label: "ENV template", content: "OPENAI_API_BASE=https://api.example.com/v1\nOPENAI_API_KEY=sk-\nOPENAI_API_MODEL=gpt" },
+    { label: "YAML template", content: "base: https://api.example.com/v1\nkey: sk-\nmodel: gpt" },
+    { label: "INI template", content: "[api]\nbase = https://api.example.com/v1\nkey = sk-\nmodel = gpt" },
+  ];
+
+  var template = $('template-per-template');
+  var container = $('templates-container');
+  templatesData.forEach(data => {
+      var clone = template.content.cloneNode(true);
+      clone.querySelector('lable').textContent = data.label;
+      clone.querySelector('textarea').value = data.content;
+      container.appendChild(clone);
+  });
+  document.querySelectorAll('.templateBtn').forEach(el=>el.onclick=()=>applyTemplate(el));
+
+</script>
+</body></html>
