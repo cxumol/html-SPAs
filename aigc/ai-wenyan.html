@@ -1,0 +1,118 @@
+<!DOCTYPE html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1" /><meta charset="utf-8" />
+  <title>文言 AI 转换器</title>
+  <link rel="stylesheet" href="https://dohliam.github.io/dropin-minimal-css/min/clmaterial.min.css">
+  <style>
+    main { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; }
+    .buttons { display: flex; flex-direction: column; align-items: center; justify-content: center;}
+    textarea { height: 200px; resize: vertical; }
+    #copyBtn { background-color: #ccc; }
+    #copyBtn.active { background-color: #4CAF50; color: white; }
+    #apiConfig { height: 100px; }
+    #templates-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(10em, 20em)); gap: 5px; justify-content: space-between; }
+    .per-template { display: flex; flex-direction: column; }
+  </style>
+</head><body><header>
+    <h3>文言 AI 转换器</h3>
+  </header>
+<main>
+  <textarea id="inputArea" placeholder="输入数据"></textarea>
+  <div class="buttons">
+      <button id="goBtn" onclick="main()">转换</button>
+      <button id="copyBtn" onclick="copyOutput()" disabled>复制</button>
+  </div>
+  <textarea id="outputArea" placeholder="输出" readonly></textarea>
+  <div class="textarea-with-lable">
+    <lable>格式目标: </lable>
+    <textarea id="formatTargetArea">入之以 pin yin, 出之以文言
+"""
+{input_text}
+"""</textarea>
+    <!--  <textarea id="formatTargetArea">{"base":"https://api.example/v1","key":"sk-","model":"gpt"}</textarea>  -->
+  </div>
+  <div class="textarea-with-lable">
+    <lable>API 配置 JSON</lable>
+    <textarea id="apiConfig">{"base": "https://api.example.com/v1",
+    "key": "sk-",
+    "model": "gpt"}</textarea>
+  </div>
+
+  
+</main>
+
+
+<div id="templates-container"></div>
+  
+<template id="template-per-template">
+    <div class="per-template">
+        <lable></lable>
+        <textarea></textarea>
+        <button class="templateBtn">应用</button>
+    </div>
+</template>
+
+<script>
+  var $=id=>document.getElementById(id);
+  var inputArea=$('inputArea'), outputArea=$('outputArea'), copyBtn=$('copyBtn'), apiConfigArea=$('apiConfig'), formatTargetArea=$('formatTargetArea');
+  var ONINPUT_TIMER=3000;
+  var inputTimer = null;
+  var copyOutput=()=>{
+    navigator.clipboard.writeText(outputArea.value);
+    copyBtn.classList.add('active');
+  };
+  var _api={base:'https://api.siliconflow.com/v1',key:'sk-vqpvqpvdilmniuupdcatiedilsmisvxflezziyfdbuzyjgdv',model:'THUDM/glm-4-9b-chat'}; // THUDM/glm-4-9b-chat Qwen/Qwen2.5-Coder-7B-Instruct
+  var oai=async(api,msg,t=0.6)=>await fetch(api.base+'/chat/completions',{method:'POST',headers:{'Authorization':'Bearer '+api.key,'Content-Type':'application/json'},body:JSON.stringify({"model":api.model,"messages":msg,temperature:t})}).then(r=>r.json()).then(j=>{var a=j.choices?.[0]?.message?.content.trim();if(!a)throw j;return a;}).catch(e=>e.message);
+  var main=async()=>{
+    var userPrompt=inputArea.value;
+    var formatTarget = formatTargetArea.value;
+    var api={..._api,...JSON.parse(apiConfigArea.value||'{}')};
+    formatTarget = formatTarget.replace(/{input_text}/g, userPrompt);
+    var messages=[{"role":"system","content":`悉依尔所谕，转换输入之数据为所定之格式。仅输出已转换之数据，毋庸赘言。`},
+    {"role":"user","content":`${formatTarget}`},];
+    outputArea.value = '生成中...';
+    copyBtn.disabled = true;
+    copyBtn.classList.remove('active');
+    var resp = await oai(api, messages);
+    outputArea.value = resp || "败矣，请复试。";
+    copyBtn.disabled=false;
+  };
+  var applyTemplate=btn=>formatTargetArea.value=btn.parentNode.querySelector('textarea').value;
+
+  var templatesData = [
+    { label: "文言文输入法", content: "入之以 pin yin, 出之以文言\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "句读点顿", content: "施以标点符号, 助句读而明辞气也\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "释义典故", content: "释每生僻字之义，兼附注典故。\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "楚辞", content: "改写为楚辞体裁\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "汉赋", content: "改写为汉赋体裁\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "诗经", content: "改写为诗经 (风/雅/颂) 体裁\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "唐诗体", content: "改写为唐诗体裁\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "宋词体", content: "改写为宋词体裁\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "元曲体", content: "改写为元曲体裁\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "音韵", content: "析其音韵\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "东北话", content: "转化为辽宁俗语\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "华北官话", content: "转化为华北官话\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "胶辽官话", content: "转化为胶辽官话\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "中原雅音", content: "转化为中原雅音\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "西南官话", content: "转化为西南官话\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "吴语", content: "转化为吴语\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "长沙话", content: "转化为长沙话\n\"\"\"\n{input_text}\n\"\"\"" },
+    { label: "粤语", content: "转化为粤语\n\"\"\"\n{input_text}\n\"\"\"" },
+  ];
+
+  var template = $('template-per-template');
+  var container = $('templates-container');
+  templatesData.forEach(data => {
+      var clone = template.content.cloneNode(true);
+      clone.querySelector('lable').textContent = data.label;
+      clone.querySelector('textarea').value = data.content;
+      container.appendChild(clone);
+  });
+  document.querySelectorAll('.templateBtn').forEach(el=>el.onclick=()=>applyTemplate(el));
+
+  inputArea.oninput = inputArea.onchange = ()=>{
+    if (inputTimer) {
+        clearTimeout(inputTimer);
+    }
+    inputTimer = setTimeout(main, ONINPUT_TIMER);
+  };
+</script>
+</body></html>
