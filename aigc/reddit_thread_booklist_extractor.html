@@ -8,23 +8,27 @@
 <body>
   <h1>get book list from a reddit thread</h1>
   <div style="display:flex;">
+    <textarea id="api-config">{"base": "https://api.example/v1",
+  "key": "sk-",
+  "model": "gpt"}</textarea>
     <input id="input" type="text" placeholder="put reddit link here..."/>
     <button id="go-btn" onclick="go();">Go</button>
   </div>
   <small>example input: https://old.reddit.com/r/ProgressionFantasy/comments/1f6dw5o/new_monthly_book_release_announcement_thread/</small>
   <div id="result"></div>
   <script>
+    var $=i=>document.getElementById(i);
   var go=()=>{
     var SYS_INST=`You are content extractor. Your task is to extract all book mentions from given document. Your output format is\n[{"book":"",author:"",url:""},...]\nfollowing JSON schema sctrictly and leaving not-mentioned fields as blank string.`;
     var USER_INST=``;
-    var link=document.getElementById('input').value.trim().replace("https://www.","https://old.").replace("https://old.","https://cors.eu.org/https://old.");
+    var apiConf=JSON.parse($('api-config').value||'{}');if(!apiConf?.model || apiConf?.model==="gpt")alert("api key missing!");
+    var link=$('input').value.trim().replace("https://www.","https://old.").replace("https://old.","https://cors.eu.org/https://old.");
     fetch(link).then(r=>r.text()).then(t=>{
       USER_INST=t.slice(t.indexOf(`role="main"`));
-      fetch('https://api.example.com/v1/chat/completions', { //BRYK
-      method: 'POST',
-      headers: { Authorization: 'Bearer sk-', 'Content-Type': 'application/json' }, //BRYK
+      fetch(apiConf.base+'/chat/completions', {method: 'POST',
+      headers: { Authorization: 'Bearer '+apiConf.key, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        model: apiConf.model,
         messages: [{ role: 'system', content: SYS_INST },
                    { role: 'user', content: USER_INST }]
         })
