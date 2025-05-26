@@ -10,6 +10,7 @@
     textarea { width: calc(50% - 1em); height: 300px; margin: 0.5em; resize: vertical; }
     #copyButton { background-color: #ccc; } /* Initial gray color */
     #copyButton.active { background-color: #4CAF50; color: white; }  /* Green when active */
+    #progressBar { font-family: monospace; margin: 0.5em 0; display: none; } /* Initially hidden */
   </style>
 </head>
 
@@ -19,50 +20,113 @@
       placeholder="输入文本或拖拽文件到这里"></textarea>
     <textarea id="outputArea" readonly></textarea>
   </main>
+  <p id="progressBar"></p>
   <button id="go" onclick="processText()">Go</button>
   <button id="copyButton" onclick="copyResult()" disabled>Copy Result</button>
+  
 
   <script>
-    var BASE="https://api.example.com/v1";
-    var KEY="sk-";
-    var MOD="gpt-4o";
-    var INTERVAL = 1000;
     var SYSTEM_PROMPT = `将输入文本转为务实速记: 极度精简, 去除冗词赘词, 去除官腔废话, 引述转直述, 纯 txt 无 markdown
 例如 "香港和台湾与中国内地的文化紧密联系" -> "港台内地文化紧密联系"
 例如 "对话者讨论了现代小说中环境描写和人物刻画的减少现象，认为这与作者、读者偏好及阅读平台的限制有关。" -> "现代小说中环境描写和人物刻画的减少，与作者、读者偏好及手机阅读有关。"
 例如 "在暗光下，这种响应较强，而在亮光下则显著减弱，表明其具备自适应能力。" -> "该响应在暗光下强, 亮光下弱, 可自适应"`;
+    var INTERVAL = 10;
+    var MAX_RETRY = 5;
     var getId = id => document.getElementById(id);
-    var inputArea = getId('inputArea'), outputArea = getId('outputArea'), copyButton = getId('copyButton');
+    var inputArea = getId('inputArea'), outputArea = getId('outputArea'), copyButton = getId('copyButton'), progressBar = getId('progressBar');
 
-    var processText = () => {
-      var text = inputArea.value;
-      outputArea.value = text.replace(/(-   \d{2,3}.*\n\n)(.*)/g, (match, p1, p2) => {
-        var userPrompt = p2.trim();
-        console.log(`Original Text:\n${userPrompt}\n`); // Keep this line for logging
+    var processText = async (isAsync = true) => {
+      let text = inputArea.value;
+      let matches = Array.from(text.matchAll(/(- +\d{2,3}.*? )(.*?\n\n.*?(?=\n\n))/gs)).map(a=>a[2]);
+      matches.unshift(text.match(/(?<=全文摘要\n\n)(.*?(?=\n\n))/gs)[0]);
+      let results = [];
+      let total = matches.length;
+      let current = 0;
 
-        fetch(BASE+'/chat/completions', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer '+KEY,'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: MOD,
-            messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: userPrompt }]
-          })
-        })
-          .then(response => response.json())
-          .then(data => {
-             var aiResponse = data.choices[0].message.content.trim();
-          console.log(`AI Resp:${aiResponse}\n`);
-             
-             outputArea.value = outputArea.value.replace(match, `${p1}${aiResponse}`) // replace with the appropriate values
-          })
-        return match; // Return the original match initially, update asynchronously after response
-      });
+      progressBar.style.display = 'block'; // Show the progress bar
+      progressBar.textContent = `[..........] -> 0/${total} <-`;
+
+      const processMatch = async (match) => {
+        let userPrompt = match.trim();
+        let retryCount = 0;
+        let success = false;
+        let result = "";
+
+        while (retryCount < MAX_RETRY && !success) {
+          try {
+            const response = await fetch(BASE + '/chat/completions', {
+              method: 'POST',
+              headers: { Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                "stream":false, "model": MOD, "messages": [
+                  // { "role": "system", "content": `你是速记员,用最简洁表述概括核心内容,删掉"强调了""讨论了""介绍了""重点强调""特别关注"等废话,只留纯知识,用文言文单字成词和常用英文首字母缩写以求极限压缩,一共不超过三句.` },
+                  { "role": "system", "content": `将输入文本转为务实速记: 极度精简, 去除冗词赘词, 去除多余空行, 引述转直述, 删掉"强调了""讨论了""介绍了""重点强调""特别关注"等官腔废话, 只留纯知识, 单行 txt 无 markdown.返回过长则恐超出限制, 遭受严惩｡ ` },
+                  { "role": "user", "content": "香港和台湾与中国内地的文化紧密联系" }, { "role": "assistant", "content": "港台内地文化紧密联系" },
+                  { "role": "user", "content": "对话者讨论了现代小说中环境描写和人物刻画的减少现象，认为这与作者、读者偏好及阅读平台的限制有关。" },
+                  { "role": "assistant", "content": "现代小说中环境描写和人物刻画的减少，与作者、读者偏好及手机阅读有关。" },
+                  { "role": "user", "content": "在暗光下，这种响应较强，而在亮光下则显著减弱，表明其具备自适应能力。" },
+                  { "role": "assistant", "content": "该响应在暗光下强, 亮光下弱, 可自适应" }, 
+                  { "role": "user", "content": "大语言模型应用于生物医学，重点在基因测序、蛋白质结构预测及疾病基因发现。优势在于复杂数据处理、特征表示、预测准确。但面临数据量小、标签稀缺及泛化差等挑战。未来五至十年，或为生命科学与药物研发重大突破期。" },
+                  { "role": "assistant", "content": "生医LLM重点在基因测序、蛋白质结构预测、疾病基因发现。好在处理复杂数据,特征表示准、预测准,但数据量小、标签稀缺、泛化差。未来五至十年，或有生科药研大突破。" }, 
+                  { role: "user", content: userPrompt }
+                ]
+              })
+            });
+
+            const data = await response.json();
+            const aiResponse = data.choices[0].message.content.trim();
+            result = `${aiResponse}`;
+            success = true;
+          } catch (e) {
+            console.error(`Error during fetch (retry ${retryCount + 1}):`, e);
+            retryCount++;
+            if (retryCount < MAX_RETRY) {
+              await new Promise(resolve => setTimeout(resolve, INTERVAL)); // Wait before retrying
+            }
+          }
+        }
+
+        if (!success) {
+          console.error(`Failed to process after ${MAX_RETRY} retries:`, userPrompt);
+          result = userPrompt; // Keep the original text if all retries fail
+          // Consider stopping all operations if a request fails repeatedly, depending on your requirements
+          // if error, hide progress bar
+          progressBar.style.display = 'none';
+        }
+
+        return result.replaceAll('>',"大于").replaceAll('<',"小于");
+      };
+
+      if (isAsync) {
+        const promises = matches.map(processMatch);
+        results = await Promise.all(promises);
+        current = total; // Update current after all promises are resolved
+        progressBar.textContent = `[##########] -> ${current}/${total} <-`;
+      } else {
+        for (let i = 0; i < total; i++) {
+          let match = matches[i].replace("\n\n",": ");
+          results.push(await processMatch(match));
+
+          current++;
+          let progress = Math.floor(current / total * 10);
+          let hashes = '#'.repeat(progress) + '.'.repeat(10 - progress);
+          progressBar.textContent = `[${hashes}] -> ${current}/${total} <-`;
+
+          // if (i < total - 1) await new Promise(resolve => setTimeout(resolve, INTERVAL));
+        }
+      }
+
+      let outputText = text;
+      for (let i = 0; i < matches.length; i++) outputText = outputText.replace(matches[i], results[i]);
+      outputText = outputText.replaceAll("-   ","").replace("\n全文摘要\n","").replace("\n章节速览\n","");
+      outputArea.value = outputText;
 
       copyButton.disabled = false;
       copyButton.classList.add('active');
-    };
+    }
 
-    var copyResult = () => { navigator.clipboard.writeText(outputArea.value); }
+
+    var copyResult = () => navigator.clipboard.writeText(outputArea.value);
     var dropHandler = ev => { ev.preventDefault(); var file = ev.dataTransfer.files[0]; var reader = new FileReader(); reader.onload = e => inputArea.value = e.target.result; reader.readAsText(file); }
     var dragOverHandler = ev => ev.preventDefault();
 
