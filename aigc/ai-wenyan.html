@@ -59,7 +59,7 @@
     navigator.clipboard.writeText(outputArea.value);
     copyBtn.classList.add('active');
   };
-  var _api={base:'https://api.siliconflow.com/v1',key:'sk-vqpvqpvdilmniuupdcatiedilsmisvxflezziyfdbuzyjgdv',model:'THUDM/glm-4-9b-chat'}; // THUDM/glm-4-9b-chat Qwen/Qwen2.5-Coder-7B-Instruct
+  var _api={base:'https://api.siliconflow.cn/v1',key:'sk-',model:'THUDM/glm-4-9b-chat'}; // THUDM/glm-4-9b-chat Qwen/Qwen2.5-Coder-7B-Instruct
   var oai=async(api,msg,t=0.6)=>await fetch(api.base+'/chat/completions',{method:'POST',headers:{'Authorization':'Bearer '+api.key,'Content-Type':'application/json'},body:JSON.stringify({"model":api.model,"messages":msg,temperature:t})}).then(r=>r.json()).then(j=>{var a=j.choices?.[0]?.message?.content.trim();if(!a)throw j;return a;}).catch(e=>e.message);
   var main=async()=>{
     var userPrompt=inputArea.value;
