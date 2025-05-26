@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8" />
+  <title>Email Classifier Demo</title>
+  <link rel="stylesheet" href="https://unpkg.com/mvp.css">
+  <style>
+    main { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; }
+    main > section { display: flex; flex-direction: column; }
+    .buttons { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+    textarea { height: 300px; resize: vertical; }
+    output { display: block; margin-top: 0.5em; padding: 0.5em; border: 1px solid var(--color-secondary); border-radius: 5px; background-color: var(--color-background); }
+    output ul { list-style: none; padding: 0; margin: 0; }
+    output li { padding: 0.2em 0; border-bottom: 1px dotted var(--color-secondary); }
+    output li:last-child { border-bottom: none; }
+    fieldset { margin-top: 1em; }
+    fieldset label { display: inline-block; margin-right: 1em; } /* Keep labels on one line */
+  </style>
+</head>
+<body>
+<main>
+  <section>
+    <label for="emailContent">Email Content:</label>
+    <textarea id="emailContent" placeholder="Paste email text here..."></textarea>
+
+    <label for="categories">Categories (comma-separated):</label>
+    <input type="text" id="categories" value="Spam, Promotions, Social, Updates, Forums, Purchases, Finance, Work, Personal, Travel">
+
+    <fieldset>
+      <legend>Select Model:</legend>
+      <label><input type="radio" name="model" value="BAAI/bge-reranker-v2-m3" checked> BAAI/bge-reranker-v2-m3</label>
+      <label><input type="radio" name="model" value="netease-youdao/bce-reranker-base_v1"> netease-youdao/bce-reranker-base_v1</label>
+    </fieldset>
+  </section>
+
+  <div class="buttons">
+      <button id="goBtn" onclick="main(this)">Go</button>
+  </div>
+
+  <section>
+    <label>Classification Results:</label>
+    <output id="outputArea"></output>
+  </section>
+</main>
+  <script>
+    var $=id=>document.getElementById(id), $$=s=>document.querySelectorAll(s);
+    var emailContent=$('emailContent'), categoriesInput=$('categories'), outputArea=$('outputArea'), goBtn=$('goBtn');
+    var defaultCategories="Spam, Promotions, Social, Updates, Forums, Purchases, Finance, Work, Personal, Travel";
+    var apiKey=atob("c2"+atob("c3Rh")+"Hppb2l1dWJxamJocndtYXhybHpzeXpoY3ZqYXJ3YmVybXF6c3p3bnFxd2x0b3h0"); // demo key, don't overuse, no warranty
+
+    var main=async(button)=>{
+      button.disabled=true;
+      outputArea.innerHTML='<p>Processing...</p>';
+
+      var query=emailContent.value;
+      var categoriesStr=categoriesInput.value||defaultCategories;
+      var documents=categoriesStr.split(',').map(doc=>doc.trim()).filter(doc=>doc);
+
+      var selectedModel=$$('input[name="model"]:checked')[0].value;
+
+      if(!query||!documents.length){
+        outputArea.innerHTML='<p style="color:var(--color-error);">Please enter email content and ensure categories are provided.</p>';
+        button.disabled=false;
+        return;
+      }
+
+      var apiUrl='https://api.siliconflow.cn/v1/rerank';
+      var requestBody={
+        model:selectedModel,
+        query:query,
+        documents:documents,
+        top_n:documents.length,
+        return_documents:false,
+        max_chunks_per_doc:1024,
+        overlap_tokens:80
+      };
+
+      try{
+        var response=await fetch(apiUrl,{
+          method:'POST',
+          headers:{ 'Authorization':`Bearer ${apiKey}`, 'Content-Type':'application/json'},
+          body:JSON.stringify(requestBody)
+        });
+
+        var result=await response.json();
+
+        if(!response.ok){
+          console.error('API Error:',result);
+          outputArea.innerHTML=`<p style="color:var(--color-error);">API Error: ${result.message||response.statusText||'Unknown error'}</p>`;
+        } else if(result.results&&Array.isArray(result.results)){
+          var classificationResults=result.results.map(item=>({
+            doc:documents[item.index],
+            score:item.relevance_score
+          }));
+
+          // Sort results by score descending
+          classificationResults.sort((a,b)=>b.score-a.score);
+
+          if(classificationResults.length>0){
+            var outputHtml='<ul>';
+            classificationResults.forEach(item=>{
+              outputHtml+=`<li><code>${item.doc}</code>:\t<code>${item.score.toFixed(4)}</code></li>`;
+            });
+            outputHtml+='</ul>';
+            outputArea.innerHTML=outputHtml;
+          } else {
+            outputArea.innerHTML='<p>No classification results returned.</p>';
+          }
+
+        } else {
+           console.error('Unexpected API response structure:',result);
+           outputArea.innerHTML='<p style="color:var(--color-error);">Unexpected API response structure.</p>';
+        }
+      } catch(error){
+        console.error('Fetch Error:',error);
+        outputArea.innerHTML=`<p style="color:var(--color-error);">Fetch Error: ${error.message}</p>`;
+      } finally{
+        button.disabled=false;
+      }
+    };
+  </script>
+</body>
+</html>
