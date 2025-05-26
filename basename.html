@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Drag - Drop Filename</title>
+<style>
+  body { font-family: sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; }
+  #dropzone { border: 2px dashed #ccc; padding: 20px; text-align: center; cursor: pointer; }
+  #output { margin-top: 10px; white-space: pre-line; }
+</style>
+</head>
+<body>
+
+<div id="dropzone" ondragover="o(event)" ondragleave="o(event)" ondrop="d(event)">Drop files here!</div>
+<div id="output"></div>
+
+<input type="file" id="fileInput" multiple style="display:none" onchange="f(this)">
+
+<script>
+var $ = id => document.getElementById(id);
+var dropzone = $('dropzone'), output = $('output');
+
+function o(e){
+  e.preventDefault();
+  dropzone.style.borderColor = e.type=='dragover'?'#333':'#ccc';
+}
+
+function d(e){
+  o(e);
+  showFiles(e.dataTransfer.files);
+}
+
+function f(input){
+  showFiles(input.files);
+}
+
+function showFiles(files){
+  var filenames = '';
+  for (var i = 0; i < files.length; i++) {
+    var filename = files[i].name;
+    // var basename = filename.substring(filename.lastIndexOf('/') + 1);
+    var basename = filename.split('/').pop().replace(/\.[^.]+$/, '');
+    filenames += basename + '\n';
+  }
+  output.textContent = filenames.trim();
+}
+
+dropzone.onclick = () => $('fileInput').click();
+
+</script>
+
+</body>
+</html>
