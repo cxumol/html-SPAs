@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" /><meta charset="utf-8" />
+  <title>Normalize sk-</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+  <p>Rule-based OpenAI-like API normalizer with model list mathcing</p>
+  <textarea id="input" placeholder="Enter API info"></textarea>
+  <button onclick="processAPIInfo();">Process</button><br>
+  <label for="modelSelect">Model:</label>
+  <select id="modelSelect" onchange="updateOutput();"></select>
+  <span id="balance"></span><br>
+  <textarea id="output" rows="5"></textarea>
+  <button id="copyButton" onclick="copyResult()">Copy Result</button>
+
+  <script>
+    var getId = Id => document.getElementById(Id);
+    var input = getId('input');
+    var output = getId('output');
+    var modelSelect = getId('modelSelect');
+    var balance = getId('balance');
+    var baseUrl,key;
+    var isV1=true;
+
+    var processAPIInfo = () => {
+      var apiInfo = input.value;
+      var urlMatch = apiInfo.match(/https?:\/\/[^\s]+/);
+      var keyMatch = apiInfo.match(/sk-[a-zA-Z0-9_]+/);
+
+      if (!urlMatch || !keyMatch) { output.value = "Invalid input"; return; }
+
+      baseUrl = urlMatch[0].replace(/\/v1.*$/, '').trim().replace(/\/$/, '');
+      key = keyMatch[0];
+
+      fetchModels();
+      updateOutput();
+    };
+
+    var fetchModels = () => {
+      var headers = { 'Authorization': `Bearer ${key}` };
+      fetch(`${baseUrl}/v1/models`, { headers })
+      .then(response => response.json())
+      .then(data => populateModels(data.data))
+      .catch(() => fetch(`${baseUrl}/models`, { headers })
+        .then(response => response.json())
+        .then(data => {populateModels(data.data);isV1=false;})
+        .catch((e) => {output.value = e.message+"\nfailed to fetch models\n"; console.error(e)})
+      );
+    };
+    var populateModels = models => {
+      modelSelect.innerHTML = '';
+      models.forEach(model => {
+        var option = document.createElement('option');
+        option.value = model.id;
+        option.text = model.id;
+        modelSelect.add(option);
+      });
+      // updateOutput();
+    };
+
+    var updateOutput = () => {
+      var selectedModel = modelSelect.value;
+      if (baseUrl && key && selectedModel){
+        output.value = JSON.stringify({ base: baseUrl+(isV1?'/v1':''), key, model: selectedModel }, null, 2);
+      }
+    };
+    var copyResult = () => { navigator.clipboard.writeText(output.value); }
+  </script>
+</body>
+</html>
