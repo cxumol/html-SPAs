@@ -1,0 +1,189 @@
+<!DOCTYPE html><html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pocketbase/0.21.1/pocketbase.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+  </head>
+  <body>
+      <h1>let's go</h1>
+      <div id="authData">
+        <button onclick="doAuth('google')">
+          login w/ google
+        </button>
+        <button onclick="doAuth('discord')">
+          login w/ discord
+        </button>
+      </div>
+      
+      <hr/>
+      <form id="myForm">
+          <label for="industry">Preferred Industry:</label>
+          <button type="submit">
+            Let's go
+          </button>
+      </form>
+      <div id="preview">
+          
+        </div>
+
+    
+    <script>
+    
+const NAICS = {
+  "11": "Agriculture, Forestry, Fishing and Hunting",
+  "21": "Mining, Quarrying, and Oil and Gas Extraction",
+  "22": "Utilities",
+  "23": "Construction",
+  "31": "Manufacturing",
+  "42": "Wholesale Trade",
+  "44": "Retail Trade",
+  "48": "Transportation and Warehousing",
+  "51": "Information",
+  "52": "Finance and Insurance",
+  "53": "Real Estate and Rental and Leasing",
+  "54": "Professional, Scientific, and Technical Services",
+  "55": "Management of Companies and Enterprises",
+  "56": "Administrative and Support and Waste Management and Remediation Services",
+  "61": "Educational Services",
+  "62": "Health Care and Social Assistance",
+  "71": "Arts, Entertainment, and Recreation",
+  "72": "Accommodation and Food Services",
+  "81": "Other Services (except Public Administration)",
+  "92": "Public Administration",
+};
+
+const sectorSelect = document.createElement("select");
+sectorSelect.name = "industry";
+sectorSelect.id = "industry";
+
+for (const sectorCode in NAICS) {
+  const option = document.createElement("option");
+  option.value = sectorCode;
+  option.textContent = NAICS[sectorCode];
+  sectorSelect.appendChild(option);
+}
+
+var form = document.getElementById('myForm')
+form.insertBefore(sectorSelect, form.lastElementChild);
+
+    </script>
+    
+    
+  <script class="lib">
+    const mainCollection = "waitlist";
+    const pb_endpoint = 'https://api.example.com' // https://example.pockethost.io
+    function checkServerAvailability(pb) {
+    apiUrl = pb_endpoint + "/api/health";
+    fetch(apiUrl)
+        .then(response => {
+            if (response.ok) {
+                console.log("PocketBase back-end server is up and running.");
+            } else {
+                throw new Error("Server responded with an error status.");
+            }
+        })
+        .catch(error => {
+            alert(`Cannot reach the back-end server ${apiUrl}. Please ensure the backend service is ready.`);
+            console.error("Error: ", error);
+        });
+    }
+    function createOrUpdate(){
+      
+    }
+
+    function displayData(){
+      if(!pb.authStore.isValid)return;
+      
+      pb.collection(mainCollection).getList(1, 1,{
+        filter: `user_id="${pb.authStore.model.id}"`
+      }).then((data)=>{
+        if (data.items.length)_displayData(data.items[0]);
+      }).catch((error) => {
+          console.error('Error displayData:', error);
+      });
+    }
+    function _displayData(data){
+      var previewTxt=[pb.authStore.model.name, ", you are in waitlist. Your interested industry is", NAICS[String(data.industry)] ].join(' ')
+      document.getElementById('preview').innerText=previewTxt;
+    }
+  </script>
+
+  <script class="main">
+    const pb = new PocketBase(pb_endpoint);
+    checkServerAvailability(pb);
+    displayAuth();
+    
+    document.getElementById('myForm').onsubmit = function(event) {
+      event.preventDefault(); 
+
+      var formData = new FormData(event.currentTarget); 
+      formData.append("user_id", pb.authStore.model.id);
+      
+      // check if record exists
+      pb.collection(mainCollection).getList(1, 1,{
+        filter: `user_id="${pb.authStore.model.id}"`
+      }).then((data)=>{
+        if (data.items.length) {
+          pb.collection(mainCollection
+                       ).update(data.items[0].id, 
+                         {industry: formData.get("industry")}
+                        ).then(_displayData
+                       ).catch((error) => console.error('Error update Data:', error))
+            }
+        else {
+          pb.collection(mainCollection
+                          ).create(formData
+                           ).then(_displayData
+                           ).catch((error) => console.error('Error create Data:', error))
+        }
+    }).catch((error) => console.error('Error display Data:', error))
+    }
+    
+    function doAuth(provider){
+      if(pb.authStore.isValid) {
+        alert("you've already logged in. no need login again. however, re-login is enabled for testing.");
+      }
+      let w = window.open();
+      pb.collection('users').authWithOAuth2({
+        provider: provider,
+        urlCallback: (url) => {
+          w.location.href = url;
+        },
+      }).then(_authData => {
+        let userMeta={};
+        const rawUser = _authData.meta.rawUser;
+        switch (provider){
+          case 'google':
+            userMeta={
+                  name: rawUser.name,
+                  avatar_url: rawUser.picture
+                }
+            break;
+          case 'discord':
+            userMeta={
+                  name: rawUser.global_name,
+                  avatar_url: `https://cdn.discordapp.com/avatars/${rawUser.id}/${rawUser.avatar}`
+                }
+            break;
+          default:
+            console.log(_authData.meta.rawUser)
+        }
+        return pb.collection('users').update(_authData.record.id, userMeta);
+      }).then(() => {
+        displayAuth();
+      }).catch(error => {
+        console.error('Error during authentication:', error);
+      });
+    }
+
+    function displayAuth(){
+      if(!pb.authStore.isValid)return;
+      const previewTxt=["You are", pb.authStore.model.name, pb.authStore.model.email].join('\t')
+      document.getElementById('authData').innerText=previewTxt;
+      displayData();
+    }
+    
+  </script>
+
+</body></html>
