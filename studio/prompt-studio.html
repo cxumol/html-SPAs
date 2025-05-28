@@ -1,0 +1,330 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8" />
+  <title>Prompt Studio</title>
+  <link rel="stylesheet" type="text/css" href="https://dohliam.github.io/dropin-minimal-css/min/kraken.min.css">
+  <style>
+    main {
+      display: grid;
+      grid-template-columns: auto 1fr 1fr; /* sidebar, left panel, right panel */
+      gap: 20px;
+      min-height: 70vh;
+    }
+    aside {
+      border-right: 1px solid var(--color-secondary);
+      padding-right: 20px;
+      min-width: 150px;max-width: 200px;
+      font-size: 0.9em;
+      color: var(--color-secondary-accent);
+    }
+    #left-panel, #right-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      min-width: 300px;
+    }
+    textarea {
+      min-height: 250px;
+      height: 40vh;
+      resize: vertical;
+      font-family: monospace;
+      font-size: 0.95em;
+    }
+    #outputArea { background-color: var(--color-bg-secondary); }
+    .buttons { display: flex; gap: 10px; justify-content: flex-start; }
+    .buttons button { flex-grow: 0; }
+
+    #refs-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-top: 10px;
+      border-top: 1px solid var(--color-secondary);
+      max-height: 30vh;
+      overflow-y: auto;
+    }
+    .ref-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+    .ref-item label {
+      font-weight: bold;
+      font-family: monospace;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .ref-item input {
+        font-size: 0.95em;
+        padding: 0.4rem 0.6rem;
+    }
+    #config-section {
+        padding-top: 10px;
+        border-top: 1px solid var(--color-secondary);
+        font-size: 0.9em;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    #config-section label { white-space: nowrap; }
+    #config-section input {
+        flex-grow: 1;
+        font-family: monospace;
+        font-size: 0.95em;
+        padding: 0.4rem 0.6rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Prompt Studio</h1>
+</header>
+
+<main>
+  <aside>
+    <p><i>Sidebar</i></p>
+    <p>TBD</p>
+  </aside>
+
+  <section id="left-panel">
+     <label for="prompt-tmpl-input">Template:</label>
+     <textarea id="prompt-tmpl-input"
+               placeholder="Enter your template here, using markers like {refName} or [[ref Name]] for variables. Configure markers below the output."
+               oninput="handleTemplateInput()"></textarea>
+
+     <div class="buttons">
+        <button onclick="addEmptyRef()" title="Add a new reference placeholder to the template and create its input field.">Add Empty Ref</button>
+        <button id="copyBtn" onclick="copyOutput()" title="Copy the generated output to the clipboard." disabled>Copy Result</button>
+     </div>
+
+     <label>References:</label>
+     <div id="refs-container">
+       <!-- Ref inputs appear here -->
+     </div>
+  </section>
+
+  <section id="right-panel">
+     <label for="outputArea">Output:</label>
+     <textarea id="outputArea" placeholder="Generated output will appear here..." readonly></textarea>
+     <div id="config-section">
+        <label for="marker-config-input">Markers:</label>
+        <input type="text" id="marker-config-input" oninput="handleMarkerInputChange(this)" title="Set the template variable markers (e.g., {}, [[ ]], << >>). Requires at least 2 characters.">
+     </div>
+  </section>
+</main>
+
+<template id="ref-template">
+  <div class="ref-item">
+    <label></label>
+    <input type="text" oninput="handleRefInputChange(this)">
+  </div>
+</template>
+
+
+<script>
+  var $ = id => document.getElementById(id);
+
+  // --- State ---
+  var spaState = {
+    refs: {}, // Stores current values { normalizedRefName: value, ... }
+    refCounter: 0, // For unique names
+    tmplMarkPair: '{}', // Default markers
+  };
+
+  // --- Elements ---
+  var promptTmplInput = $('prompt-tmpl-input');
+  var outputArea = $('outputArea');
+  var refsContainer = $('refs-container');
+  var refTemplate = $('ref-template');
+  var copyBtn = $('copyBtn');
+  var markerConfigInput = $('marker-config-input');
+
+  // --- Template Markers ---
+  var tmplMarkL, tmplMarkR;
+  var escapedTmplMarkL, escapedTmplMarkR;
+  var refRegex; // Regex to find all potential refs based on current markers
+
+  // --- Utility Functions ---
+  var escapeRegex = (str) => str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  var normalizeRefName = (name) => (name || '').trim(); // Trim whitespace
+
+  // --- Marker Logic ---
+  var updateMarkerConfig = (newPair) => {
+    if (!newPair || newPair.trim().length < 2) {
+        console.warn("Invalid markers. Reverting to '{}'.");
+        newPair = '{}';
+        markerConfigInput.value = newPair;
+    }
+    spaState.tmplMarkPair = newPair;
+    var mid = Math.ceil(spaState.tmplMarkPair.length / 2);
+    tmplMarkL = spaState.tmplMarkPair.slice(0, mid);
+    tmplMarkR = spaState.tmplMarkPair.slice(mid);
+    escapedTmplMarkL = escapeRegex(tmplMarkL);
+    escapedTmplMarkR = escapeRegex(tmplMarkR);
+    // Non-greedy match for content inside markers
+    refRegex = new RegExp(`${escapedTmplMarkL}(.*?)${escapedTmplMarkR}`, 'g');
+    console.log("Markers updated:", { L: tmplMarkL, R: tmplMarkR, regex: refRegex.source });
+  };
+
+  // Builds regex for a *specific*, *normalized* ref name using current markers
+  var singleRefRegex = (normalizedName) => {
+      let escapedName = escapeRegex(normalizedName);
+      // Important: This regex finds the *specific* normalized name,
+      // but allows for optional whitespace around it within the markers in the source template.
+      return new RegExp(`${escapedTmplMarkL}\\s*${escapedName}\\s*${escapedTmplMarkR}`, 'g');
+  };
+
+  // --- Core Logic ---
+
+  // Extracts unique, *normalized* reference names from text in their order of appearance.
+  var extractRefsOrder = (text) => {
+    if (!refRegex) return [];
+    var matches = text.matchAll(refRegex);
+    var normalizedNames = [];
+    var seen = new Set();
+    for (const match of matches) {
+        const normalized = normalizeRefName(match[1]);
+        if (normalized && !seen.has(normalized)) {
+            normalizedNames.push(normalized);
+            seen.add(normalized);
+        }
+    }
+    return normalizedNames;
+  };
+
+  // Adds a single ref input UI element.
+  var addRefUI = (normalizedRefName) => {
+    if (!normalizedRefName) return; // Should not happen if called correctly
+
+    var clone = refTemplate.content.cloneNode(true), label = clone.querySelector('label'), input = clone.querySelector('input');
+    // Create a safe ID (though not strictly needed if we select by data-ref-name)
+    var safeId = 'ref-input-' + normalizedRefName.replace(/\W/g, '_');
+
+    label.textContent = normalizedRefName + ':';
+    label.htmlFor = safeId; // Good practice for accessibility
+    input.id = safeId;
+    input.dataset.refName = normalizedRefName; // Store normalized name
+    // Use value from state (which was updated in syncRefsUI)
+    input.value = spaState.refs[normalizedRefName] || '';
+    input.placeholder = `Value for ${tmplMarkL}${normalizedRefName}${tmplMarkR}`;
+
+    refsContainer.appendChild(clone);
+  };
+
+
+  // Rebuilds the reference input fields based on the template content, preserving order and values.
+  var syncRefsUI = () => {
+    var templateRefsOrder = extractRefsOrder(promptTmplInput.value); // Get ordered, unique, normalized refs
+    var oldValues = { ...spaState.refs }; // Preserve existing values
+    var newRefsState = {}; // Build the next state
+
+    // Populate new state based on template order, preserving old values
+    templateRefsOrder.forEach(normalizedName => {
+        newRefsState[normalizedName] = oldValues[normalizedName] || ''; // Use old value or default to empty
+    });
+
+    spaState.refs = newRefsState; // Update the main state
+
+    // Clear and rebuild the UI based on the new state and order
+    refsContainer.innerHTML = ''; // Clear existing inputs
+    templateRefsOrder.forEach(addRefUI); // Add inputs in the correct order using updated state
+  };
+
+
+  // Generates the final output based on template and current ref values.
+  var updateOutput = () => {
+    var output = promptTmplInput.value;
+    // Iterate over the *state* refs (normalized keys)
+    for (var normalizedRefName in spaState.refs) {
+        var value = spaState.refs[normalizedRefName];
+         // Only replace if there's a value, otherwise leave the placeholder
+        if (value) {
+            // Use singleRefRegex which handles potential whitespace variation in the template
+            output = output.replace(singleRefRegex(normalizedRefName), value);
+        }
+    }
+    outputArea.value = output;
+    copyBtn.disabled = !output;
+  };
+
+  // --- Event Handlers ---
+
+  var handleTemplateInput = () => {
+    // 1. Sync the UI based on the *current* template content (handles adds, removes, renames, reorders)
+    syncRefsUI();
+    // 2. Update the output based on the *new* state of refs
+    updateOutput();
+  };
+
+  var handleRefInputChange = (inputElement) => {
+    var normalizedRefName = inputElement.dataset.refName; // Get normalized name
+    spaState.refs[normalizedRefName] = inputElement.value; // Update state
+    updateOutput(); // Regenerate output
+  };
+
+  var handleMarkerInputChange = (inputElement) => {
+    updateMarkerConfig(inputElement.value);
+    // Markers changed, re-evaluate the template completely
+    handleTemplateInput();
+  };
+
+  // --- Button Actions ---
+
+  var addEmptyRef = () => {
+    var baseName, newPlaceholder, normalizedNewName;
+    var templateContent = promptTmplInput.value;
+    var existingNormalizedRefs = new Set(extractRefsOrder(templateContent)); // Use Set for quick lookups
+
+    // Find a unique normalized name
+    do {
+      spaState.refCounter++;
+      baseName = `newRef${spaState.refCounter}`;
+      normalizedNewName = normalizeRefName(baseName);
+    } while (existingNormalizedRefs.has(normalizedNewName) || normalizedNewName in spaState.refs);
+
+    // Construct placeholder using current markers
+    newPlaceholder = tmplMarkL + normalizedNewName + tmplMarkR;
+
+    // Add placeholder to the end of the template
+    var separator = templateContent.endsWith('\n') || templateContent.length === 0 ? '' : '\n';
+    // Update template value and trigger sync/output update
+    promptTmplInput.value += separator + newPlaceholder;
+    handleTemplateInput(); // This will sync UI and update output
+
+    // Focus the newly added input
+    var newInput = refsContainer.querySelector(`input[data-ref-name="${normalizedNewName}"]`);
+    if (newInput) newInput.focus();
+  };
+
+  var copyOutput = () => {
+    if (!outputArea.value) return;
+    navigator.clipboard.writeText(outputArea.value)
+      .then(() => {
+        var originalText = copyBtn.textContent;
+        copyBtn.textContent = 'Copied!';
+        copyBtn.disabled = true;
+        setTimeout(() => {
+            copyBtn.textContent = originalText;
+            copyBtn.disabled = !outputArea.value;
+            }, 1500);
+      })
+      .catch(err => {
+          console.error('Failed to copy text: ', err);
+          alert('Failed to copy text. Check browser permissions.');
+      });
+  };
+
+  var initializeApp = () => {
+    markerConfigInput.value = spaState.tmplMarkPair;
+    updateMarkerConfig(spaState.tmplMarkPair); // Set up initial markers/regex
+    handleTemplateInput(); // Initial sync based on empty/default template
+  };
+
+  initializeApp();
+
+</script>
+
+</body>
+</html>
