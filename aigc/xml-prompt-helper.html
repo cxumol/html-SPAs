@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" /><meta charset="utf-8" />
+  <title>XML Prompt Helper</title>
+  <link rel="stylesheet" href="https://unpkg.com/mvp.css">
+  <style>div{display: block flex;}</style>
+</head>
+<body>
+  <main>
+    <textarea rows="20" id="promptArea"></textarea>
+    
+    <button onclick="copyPrompt()">Copy Prompt</button>
+    <div>
+      <button onclick="appendTag()">Tag</button>
+      <input type="text" id="tagName">
+    </div><div>
+      <button onclick="appendAttr()">Attr</button>
+      <input type="text" id="attrName">
+    </div>
+    
+  </main>
+  <script>
+    // .h
+    var toPascal = str => str.split(/\s|_|-/).map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+    var getId = id => document.getElementById(id);
+    // main
+    var appendTag=()=>{
+      var tagName = getId('tagName').value;
+      tagName = toPascal(tagName);
+      getId('promptArea').value += `\n<${tagName}>\n\n</${tagName}>\n`;
+    }
+
+    var appendAttr=()=>{
+      var attrName = getId('attrName').value, promptText = getId('promptArea').value;
+      var lastTagStart = promptText.lastIndexOf('<');
+      while (promptText[lastTagStart + 1] === '/') { 
+        lastTagStart = promptText.lastIndexOf('<', lastTagStart - 1);
+      }
+      var lastTagEnd = promptText.indexOf('>', lastTagStart);
+      var modifiedPrompt = `${promptText.slice(0, lastTagEnd)} ${attrName}=""${promptText.slice(lastTagEnd)}`; 
+      getId('promptArea').value = modifiedPrompt;
+    }
+
+    var copyPrompt=()=> navigator.clipboard.writeText(getId('promptArea').value);
+  </script>
+</body>
+</html>
