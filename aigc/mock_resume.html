@@ -30,7 +30,7 @@
       var name = el('name').value, job = el('jobTitle').value;
       var prompt = `Generate a mock resume in printer-firendly HTML format for ${name}${job ? ` with the job title of ${job}` : ''}.`;
       // var API="api.freechat.cnai.me/v1",SK="sk-",model="gpt-4o-mini";
-      var apiConf=JSON.parse($('api-config').value||'{}');if(!apiConf?.model || apiConf?.model==="gpt")alert("api key missing!");
+      var apiConf=JSON.parse(el('api-config').value||'{}');if(!apiConf?.model || apiConf?.model==="gpt")alert("api key missing!");
       fetch(apiConf.base+'/chat/completions', {method: 'POST', 
         headers: { 'Authorization': 'Bearer '+apiConf.key, 'Content-Type': 'application/json' },
         body: JSON.stringify({model: apiConf.model, messages: [{ role: 'user', content: prompt }] })
