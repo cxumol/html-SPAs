@@ -1,0 +1,66 @@
+name: Update HTML Index
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.html'
+      - '!index.html' # prevent loops
+      - '!.github/**'
+
+jobs:
+  update-index:
+    permissions:
+      contents: write # Required to commit changes back to the repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Needed for `git log` to get file modification dates
+
+      - name: Generate index.json from content files
+        id: generate_json
+        run: |
+          json_data=$(
+            find . -type f -name "*.html" ! -name "_index.html" ! -name "index.html" | sort | while read -r filepath; do
+              filepath="${filepath#./}"
+              title=$(grep -oP '<title>\K[^<]+' "$filepath" | head -1)
+              description=$(grep -oP '<meta name="description" content="\K[^"]+' "$filepath" | head -1)
+              last_modified=$(git log -1 --pretty=format:%cI -- "$filepath")
+              printf "%s\t%s\t%s\t%s\n" "$filepath" "${title:-$filepath}" "$description" "$last_modified"
+            done | jq --raw-input --slurp '
+              split("\n") | 
+              map(select(length > 0) | 
+              split("\t") | 
+              {
+                path: .[0],
+                title: .[1],
+                description: .[2],
+                last_modified: .[3]
+              })'
+          )
+          cat <<EOF >> "$GITHUB_OUTPUT"
+          json_payload<<HEREDOC
+          ${json_data}
+          HEREDOC
+          EOF
+
+      - name: Generate index.html from template
+        run: |
+          # Read the template file from _index.html
+          template=$(cat _index.html)
+          
+          json_data="${{ steps.generate_json.outputs.json_payload }}"
+          
+          # Replace the placeholder and write the result to the final index.html
+          printf "%s" "${template/__JSON_DATA__/$json_data}" > index.html
+          echo "index.html successfully generated from _index.html."
+
+      - name: Commit and push if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: auto-generate project index"
+          # Only commit changes to the generated index.html file
+          file_pattern: index.html
