@@ -21,20 +21,13 @@ jobs:
         with:
           fetch-depth: 0 # Needed for `git log` to get file modification dates
 
-      - name: Generate and save index JSON
-        id: generate_json
+      - name: Generate index JSON data file
         run: |
-          # Use the heredoc format for GitHub Actions multiline outputs.
-          echo "json_payload<<HEREDOC" >> "$GITHUB_OUTPUT"
-          
           find . -type f -name "*.html" ! -name "_index.html" ! -name "index.html" | sort | while read -r filepath; do
             filepath="${filepath#./}"
-            # grep and git log are safe; their output is captured into variables.
             title=$(grep -oP '<title>\K[^<]+' "$filepath" | head -1)
             description=$(grep -oP '<meta name="description" content="\K[^"]+' "$filepath" | head -1)
             last_modified=$(git log -1 --pretty=format:%cI -- "$filepath")
-            # printf is safe because %s treats arguments as literal strings.
-            # The output of printf is then piped to jq, which is also safe.
             printf "%s\t%s\t%s\t%s\n" "$filepath" "${title:-$filepath}" "$description" "$last_modified"
           done | jq --raw-input --slurp '
             split("\n") |
@@ -45,15 +38,14 @@ jobs:
               title: .[1],
               description: .[2],
               last_modified: .[3]
-            })' >> "$GITHUB_OUTPUT"
-          echo "HEREDOC" >> "$GITHUB_OUTPUT"
-
+            })' > _data.json
+          
+          echo "Generated data file _data.json"
 
       - name: Generate index.html from template
         run: |
-          template=$(cat _index.html)
-          json_data="${{ steps.generate_json.outputs.json_payload }}"
-          printf "%s" "${template/__JSON_DATA__/$json_data}" > index.html
+          sed -e '/__JSON_DATA__/r _data.json' -e '/__JSON_DATA__/d' _index.html > index.html
+          rm _data.json
           echo "index.html successfully generated from _index.html."
 
       - name: Commit and push if changed
