@@ -3,7 +3,7 @@ name: Update HTML Index
 on:
   push:
     branches:
-      - gh-pages
+      - 'gh-pages'
     paths:
       - '**.html'
       - '!index.html' # prevent loops
