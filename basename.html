@@ -3,21 +3,27 @@
 <head>
 <title>Drag - Drop Filename</title>
 <style>
-  body { font-family: sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; }
+  body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
   #dropzone { border: 2px dashed #ccc; padding: 20px; text-align: center; cursor: pointer; }
   #output { margin-top: 10px; white-space: pre-line; }
+  #toggleContainer { margin-top: 10px; }
 </style>
 </head>
 <body>
 
 <div id="dropzone" ondragover="o(event)" ondragleave="o(event)" ondrop="d(event)">Drop files here!</div>
+<div id="toggleContainer">
+  <label for="fullFilenameToggle">Show full filename</label>
+  <input type="checkbox" id="fullFilenameToggle" onchange="updateFilenames()">
+</div>
 <div id="output"></div>
 
 <input type="file" id="fileInput" multiple style="display:none" onchange="f(this)">
 
 <script>
 var $ = id => document.getElementById(id);
-var dropzone = $('dropzone'), output = $('output');
+var dropzone = $('dropzone'), output = $('output'), fullFilenameToggle = $('fullFilenameToggle');
+var currentFiles = [];
 
 function o(e){
   e.preventDefault();
@@ -26,20 +32,27 @@ function o(e){
 
 function d(e){
   o(e);
-  showFiles(e.dataTransfer.files);
+  currentFiles = e.dataTransfer.files;
+  updateFilenames();
 }
 
 function f(input){
-  showFiles(input.files);
+  currentFiles = input.files;
+  updateFilenames();
 }
 
-function showFiles(files){
+function updateFilenames(){
   var filenames = '';
-  for (var i = 0; i < files.length; i++) {
-    var filename = files[i].name;
-    // var basename = filename.substring(filename.lastIndexOf('/') + 1);
-    var basename = filename.split('/').pop().replace(/\.[^.]+$/, '');
-    filenames += basename + '\n';
+  var showFull = fullFilenameToggle.checked;
+
+  for (var i = 0; i < currentFiles.length; i++) {
+    var filename = currentFiles[i].name;
+    if (showFull) {
+      filenames += filename + '\n';
+    } else {
+      var basename = filename.split('/').pop().replace(/\.[^.]+$/, '');
+      filenames += basename + '\n';
+    }
   }
   output.textContent = filenames.trim();
 }
