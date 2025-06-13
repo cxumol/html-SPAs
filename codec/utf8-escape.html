@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" /><meta charset="utf-8" />
+  <title>Unicode Escape (\uXXXX) Encoder/Decoder</title>
+  <link rel="stylesheet" href="https://unpkg.com/mvp.css">
+</head>
+<body>
+  <main id="main">
+    <header>
+      <h1>Unicode Escape (<code>\uXXXX</code>) Encoder/Decoder</h1>
+      <p>This tool converts text to <code>\uXXXX</code> Unicode escape sequences (used in JavaScript, JSON, etc.) and decodes such sequences back into text. It handles characters including those outside the Basic Multilingual Plane (e.g., emojis) by encoding their surrogate pairs.</p>
+    </header>
+    
+    <section>
+      <article>
+        <header>
+          <h2>Original Text / Decoded Output</h2>
+        </header>
+        <textarea id="textOriginal" rows="10" placeholder="Enter text here to encode. Example: Hello World! 香 😂. Decoded output will also appear here."></textarea>
+      </article>
+      
+      <article>
+        <header>
+          <h2>Encoded Text (<code>\uXXXX</code>) / Input for Decoding</h2>
+        </header>
+        <textarea id="textEncoded" rows="10" placeholder="Enter \uXXXX encoded text here to decode. Example: \u0048\u0065\u006c\u006c\u006f\u0020\u0057\u006f\u0072\u006c\u0064\u0021\u0020\u9999\u0020\ud83d\ude02. Encoded output will also appear here."></textarea>
+      </article>
+    </section>
+    
+    <nav>
+      <button onclick="handleEncode()">Encode to <code>\uXXXX</code></button>
+      <button onclick="handleDecode()">Decode from <code>\uXXXX</code></button>
+    </nav>
+
+    <footer>
+        <p>The decoder handles strings containing mixed <code>\uXXXX</code> sequences and literal characters. For example, an input like <code>\uff08\u672c\u7ae0完\uff09</code> will be decoded as <code>（本章完）</code>, where <code>完</code> is treated as a literal character if it's not part of a valid 4-digit hex escape sequence.</p>
+    </footer>
+  </main>
+  
+  <script>
+    var $=id=>document.getElementById(id);
+
+    var handleEncode = () => 
+      $('textEncoded').value = Array.from($('textOriginal').value).map(
+        char => (char === '\n' || char === '\r' || char === '\t') ? char : '\\u' + ('0000' + char.charCodeAt(0).toString(16)).slice(-4)
+      ).join('');
+
+    var handleDecode = () => 
+      $('textOriginal').value = $('textEncoded').value.replace(
+        /\\u([0-9a-fA-F]{4})/g, 
+        (match, hex) => String.fromCharCode(parseInt(hex, 16))
+      );
+  </script>
+  <script src="https://dohliam.github.io/dropin-minimal-css/switcher.js" type="text/javascript"></script>
+</body>
+</html>
