@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1-to-N Text Diff Tool</title>
+    <!-- <link rel="stylesheet" href="https://unpkg.com/mvp.css"> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+    <style>
+        :root { --del-bg: #ffcccc; --ins-bg: #ccffcc; --color: #333; }
+        body { padding: 1rem; max-width: 100%; overflow-x: hidden; }
+        main { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; height: 85vh; }
+        section { display: flex; flex-direction: column; height: 100%; }
+        textarea, .diff-view { flex-grow: 1; font-family: monospace; font-size: 14px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: none; white-space: pre-wrap; word-break: break-all; overflow-y: auto; }
+        .diff-view { background: #f4f4f4; color: #555; }
+        nav { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 5px; }
+        nav button { padding: 4px 8px; font-size: 0.8rem; margin: 0; border: 1px solid #aaa; background: #eee; cursor: pointer; }
+        nav button.active { background: var(--color); color: #fff; border-color: var(--color); }
+        .controls { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+        input[type="text"] { margin: 0; padding: 5px; width: auto; flex-grow: 1; }
+        del { background: var(--del-bg); text-decoration: none; color: #b00; }
+        ins { background: var(--ins-bg); text-decoration: none; color: #008000; }
+        header { display: flex; justify-content: space-between; align-items: center; padding: 0 0 10px 0; margin-bottom: 10px; border-bottom: 1px solid #eee; }
+        h1 { margin: 0; font-size: 1.5rem; }
+        @media (max-width: 768px) { main { grid-template-columns: 1fr; height: auto; } textarea { min-height: 300px; } }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Multi-Ver Diff</h1>
+        <button onclick="share()" style="font-size:0.9rem; padding: 5px 15px;">🔗 Copy Share URL</button>
+    </header>
+
+    <main>
+        <!-- Left Panel: Base -->
+        <section>
+            <div class="controls"><strong>Base Version</strong></div>
+            <textarea id="baseTxt" placeholder="Enter base text here..." oninput="updBase(this.value)"></textarea>
+        </section>
+
+        <!-- Right Panel: Versions -->
+        <section>
+            <nav id="tabs"></nav>
+            <div class="controls">
+                <input type="text" id="verName" placeholder="Version Name" oninput="updName(this.value)">
+                <button onclick="addVer()" style="padding:5px;">+</button>
+                <button onclick="delVer()" style="padding:5px; background:#fee; color:#900;">&times;</button>
+            </div>
+            <!-- Input for editing selected version -->
+            <textarea id="verTxt" style="height: 30%; flex-grow: 0; margin-bottom:10px;" placeholder="Edit current version text..." oninput="updVer(this.value)"></textarea>
+            <!-- Visual Diff Output -->
+            <div id="diffOut" class="diff-view"></div>
+        </section>
+    </main>
+
+    <script>
+        // --- Utils ---
+        var $=id=>document.getElementById(id);
+        var enc=s=>LZString.compressToEncodedURIComponent(JSON.stringify(s)), dec=s=>JSON.parse(LZString.decompressFromEncodedURIComponent(s));
+        
+        // --- State ---
+        var dmp = new diff_match_patch();
+        var state = { base: "", idx: 0, vers: [{ n: "Draft 1", t: "" }] };
+
+        // --- Core Logic ---
+        var init = () => {
+            var h = location.hash.slice(1);
+            if(h) {
+                try {
+                    var d = dec(h);
+                    // Reconstruct text from patches if necessary, otherwise assume full text (simplified for stability)
+                    // For size optimization requested: d.v contains patches relative to base
+                    state.base = d.b || "";
+                    state.vers = d.v.map(v => ({ n: v.n, t: dmp.patch_apply(dmp.patch_fromText(v.p), state.base)[0] }));
+                    state.idx = d.i || 0;
+                } catch(e) { console.error("Load failed", e); }
+            }
+            render();
+        };
+
+        var render = () => {
+            $('baseTxt').value = state.base;
+            
+            // Render Tabs
+            var html = state.vers.map((v, i) => 
+                `<button class="${i===state.idx?'active':''}" onclick="setIdx(${i})">${v.n}</button>`
+            ).join('');
+            $('tabs').innerHTML = html;
+
+            // Setup Right Panel Inputs
+            var cur = state.vers[state.idx];
+            $('verName').value = cur.n;
+            if(document.activeElement !== $('verTxt')) $('verTxt').value = cur.t;
+
+            // Render Diff
+            // diff_main(text1, text2) -> text1 is base (red/del), text2 is new (green/ins)
+            var diffs = dmp.diff_main(state.base, cur.t);
+            dmp.diff_cleanupSemantic(diffs);
+            // Custom HTML generation for semantic ins/del
+            var diffHtml = diffs.map(d => {
+                var txt = d[1].replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+                return d[0] === 0 ? txt : (d[0] === -1 ? `<del>${txt}</del>` : `<ins>${txt}</ins>`);
+            }).join('');
+            $('diffOut').innerHTML = diffHtml || '<span style="color:#999; font-style:italic">No changes or empty text.</span>';
+        };
+
+        // --- Actions ---
+        var updBase = val => { state.base = val; render(); };
+        var updVer = val => { state.vers[state.idx].t = val; render(); };
+        var updName = val => { state.vers[state.idx].n = val; render(); }; // Note: re-rendering tabs on every keystroke is cheap here
+        
+        var setIdx = i => { state.idx = i; render(); };
+        var addVer = () => { 
+            state.vers.push({ n: `Draft ${state.vers.length + 1}`, t: state.base }); // Clone base to new
+            state.idx = state.vers.length - 1; 
+            render(); 
+        };
+        var delVer = () => {
+            if(state.vers.length <= 1) return alert("Keep at least one version.");
+            state.vers.splice(state.idx, 1);
+            state.idx = Math.max(0, state.idx - 1);
+            render();
+        };
+
+        var share = () => {
+            // Compress: Store base, and store other versions as patches relative to base
+            var payload = {
+                b: state.base,
+                i: state.idx,
+                v: state.vers.map(v => ({ 
+                    n: v.n, 
+                    p: dmp.patch_toText(dmp.patch_make(state.base, v.t)) // Store patches to save space
+                }))
+            };
+            var url = location.protocol + '//' + location.host + location.pathname + '#' + enc(payload);
+            navigator.clipboard.writeText(url).then(() => alert("URL copied! (Size: " + url.length + " chars)"));
+        };
+
+        // Start
+        window.addEventListener('load', init);
+        window.addEventListener('hashchange', init);
+    </script>
+</body>
+</html>
