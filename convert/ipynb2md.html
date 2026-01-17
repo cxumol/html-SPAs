@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPYNB 转 MD 工具</title>
+    <style>
+        :root {
+            --bg-color: #f0f0f0;
+            --main-color: #000000;
+            --accent-color: #ff3366;
+            --border-width: 3px;
+            --shadow-offset: 6px;
+            --font-main: 'Courier New', Courier, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: var(--font-main);
+            background-color: var(--bg-color);
+            color: var(--main-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* 布局容器 */
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* 标题样式 */
+        h1 {
+            font-size: 3rem;
+            text-transform: uppercase;
+            margin: 0;
+            text-shadow: 4px 4px 0px var(--main-color);
+            border: var(--border-width) solid var(--main-color);
+            background: #fff;
+            padding: 10px 20px;
+            display: inline-block;
+            transform: rotate(-1deg);
+        }
+
+        /* 通用粗野主义组件样式 */
+        .box {
+            background: #fff;
+            border: var(--border-width) solid var(--main-color);
+            padding: 20px;
+            box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--main-color);
+            transition: transform 0.1s;
+        }
+
+        .box:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0px var(--main-color);
+        }
+
+        /* 拖拽上传区域 */
+        #drop-zone {
+            border: var(--border-width) dashed var(--main-color);
+            text-align: center;
+            padding: 40px;
+            cursor: pointer;
+            background: #fff;
+            font-weight: bold;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+        }
+
+        #drop-zone.drag-over {
+            background: var(--main-color);
+            color: #fff;
+            border-style: solid;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        /* 控制区域 */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .toggle-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* 自定义 Checkbox */
+        input[type="checkbox"] {
+            appearance: none;
+            width: 30px;
+            height: 30px;
+            border: var(--border-width) solid var(--main-color);
+            background: #fff;
+            cursor: pointer;
+            position: relative;
+        }
+
+        input[type="checkbox"]:checked {
+            background: var(--main-color);
+        }
+
+        input[type="checkbox"]:checked::after {
+            content: '✓';
+            color: #fff;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.5rem;
+        }
+
+        /* 按钮样式 */
+        .btn-group {
+            display: flex;
+            gap: 15px;
+        }
+
+        button {
+            font-family: var(--font-main);
+            font-size: 1rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            padding: 10px 20px;
+            border: var(--border-width) solid var(--main-color);
+            background: #fff;
+            cursor: pointer;
+            box-shadow: 4px 4px 0px var(--main-color);
+            transition: all 0.1s;
+        }
+
+        button:hover {
+            background: var(--main-color);
+            color: #fff;
+            transform: translate(-2px, -2px);
+            box-shadow: 6px 6px 0px var(--main-color);
+        }
+
+        button:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0px var(--main-color);
+        }
+
+        button.secondary {
+            background: var(--accent-color);
+            color: #fff;
+            border-color: #000;
+        }
+
+        /* 输出区域 */
+        #output-area {
+            width: 100%;
+            height: 500px;
+            font-family: var(--font-main);
+            font-size: 1rem;
+            padding: 15px;
+            border: var(--border-width) solid var(--main-color);
+            background: #fff;
+            resize: vertical;
+            outline: none;
+            box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--main-color);
+        }
+
+        #output-area:focus {
+            background: #fdfdfd;
+        }
+
+        /* 状态信息 */
+        .status-bar {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        /* Toast 提示 */
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: var(--main-color);
+            color: #fff;
+            text-align: center;
+            padding: 16px;
+            position: fixed;
+            z-index: 100;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 3px solid #fff;
+            box-shadow: 6px 6px 0px rgba(0,0,0,0.5);
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        #toast.show {
+            visibility: visible;
+            animation: fadein 0.5s, fadeout 0.5s 2.5s;
+        }
+
+        @keyframes fadein {
+            from {bottom: 0; opacity: 0;}
+            to {bottom: 30px; opacity: 1;}
+        }
+
+        @keyframes fadeout {
+            from {bottom: 30px; opacity: 1;}
+            to {bottom: 0; opacity: 0;}
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 600px) {
+            h1 { font-size: 2rem; }
+            .controls { flex-direction: column; align-items: flex-start; }
+            .btn-group { width: 100%; }
+            button { flex: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>IPYNB -> MD</h1>
+        </header>
+
+        <!-- 上传区域 -->
+        <div id="drop-zone" class="box">
+            <p>点击或拖拽 .ipynb 文件到这里</p>
+            <input type="file" id="file-input" accept=".ipynb">
+        </div>
+
+        <!-- 控制栏 -->
+        <div class="controls box">
+            <label class="toggle-group">
+                <input type="checkbox" id="include-output">
+                <span>是否包含输出</span>
+            </label>
+
+            <div class="btn-group">
+                <button id="copy-btn">复制内容</button>
+                <button id="download-btn" class="secondary">下载 .md</button>
+            </div>
+        </div>
+
+        <!-- 输出区域 -->
+        <textarea id="output-area" placeholder="转换后的 Markdown 将显示在这里..."></textarea>
+        
+        <div class="status-bar" id="status-bar">等待文件输入...</div>
+    </div>
+
+    <!-- 消息提示 -->
+    <div id="toast">提示信息</div>
+
+    <script>
+        // DOM 元素引用
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const outputArea = document.getElementById('output-area');
+        const includeOutputCheckbox = document.getElementById('include-output');
+        const copyBtn = document.getElementById('copy-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const statusBar = document.getElementById('status-bar');
+        const toast = document.getElementById('toast');
+
+        // 状态变量
+        let currentNotebook = null;
+
+        // --- 事件监听 ---
+
+        // 点击上传区域触发文件选择
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        // 拖拽效果
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            if (e.dataTransfer.files.length) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        // 文件选择变化
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        // 切换输出选项重新渲染
+        includeOutputCheckbox.addEventListener('change', () => {
+            if (currentNotebook) {
+                convertAndRender();
+            }
+        });
+
+        // 复制按钮
+        copyBtn.addEventListener('click', () => {
+            if (!outputArea.value) {
+                showToast("没有内容可复制");
+                return;
+            }
+            outputArea.select();
+            document.execCommand('copy');
+            showToast("已复制到剪贴板");
+            window.getSelection().removeAllRanges();
+        });
+
+        // 下载按钮
+        downloadBtn.addEventListener('click', () => {
+            if (!outputArea.value) {
+                showToast("没有内容可下载");
+                return;
+            }
+            const blob = new Blob([outputArea.value], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'converted_notebook.md';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast("下载已开始");
+        });
+
+        // --- 核心逻辑 ---
+
+        function handleFile(file) {
+            if (!file.name.endsWith('.ipynb')) {
+                showToast("错误：请上传 .ipynb 文件");
+                statusBar.textContent = "文件格式错误";
+                return;
+            }
+
+            statusBar.textContent = `正在读取: ${file.name}`;
+            const reader = new FileReader();
+
+            reader.onload = (e) => {
+                try {
+                    currentNotebook = JSON.parse(e.target.result);
+                    // 验证是否为有效的 notebook 结构
+                    if (!currentNotebook.cells) {
+                        throw new Error("无效的 notebook 结构 (缺少 cells)");
+                    }
+                    statusBar.textContent = `加载成功: ${file.name} (${currentNotebook.cells.length} 个单元格)`;
+                    convertAndRender();
+                    showToast("转换完成");
+                } catch (err) {
+                    console.error(err);
+                    statusBar.textContent = "解析失败: JSON 格式错误";
+                    showToast("无法解析文件内容");
+                }
+            };
+
+            reader.onerror = () => {
+                statusBar.textContent = "读取文件出错";
+                showToast("文件读取错误");
+            };
+
+            reader.readAsText(file);
+        }
+
+        function convertAndRender() {
+            if (!currentNotebook) return;
+
+            const includeOutput = includeOutputCheckbox.checked;
+            let markdownContent = "";
+
+            currentNotebook.cells.forEach(cell => {
+                if (cell.cell_type === 'markdown') {
+                    // 处理 Markdown 单元格
+                    // source 通常是字符串数组
+                    const content = normalizeLineEndings(cell.source.join(''));
+                    markdownContent += content + "\n\n";
+                } else if (cell.cell_type === 'code') {
+                    // 处理代码单元格
+                    const code = normalizeLineEndings(cell.source.join(''));
+                    markdownContent += "```py\n" + (code || " ") + "\n```\n";
+
+                    // 处理输出
+                    if (includeOutput && cell.outputs && cell.outputs.length > 0) {
+                        cell.outputs.forEach(output => {
+                            const outputText = extractOutputText(output);
+                            if (outputText) {
+                                markdownContent += "```log\n" + outputText + "\n```\n";
+                            }
+                        });
+                    }
+                    markdownContent += "\n";
+                }
+            });
+
+            outputArea.value = markdownContent;
+        }
+
+        // 提取输出文本的辅助函数
+        function extractOutputText(output) {
+            let text = "";
+            
+            // 1. 处理流式输出
+            if (output.output_type === 'stream' && output.text) {
+                text += output.text.join('');
+            }
+            // 2. 处理执行结果 (如不带 print 的最后一条表达式)
+            else if (output.output_type === 'execute_result' && output.data) {
+                if (output.data['text/plain']) {
+                    text += output.data['text/plain'].join('');
+                }
+            }
+            // 3. 处理错误输出
+            else if (output.output_type === 'error') {
+                text += `${output.ename}: ${output.evalue}\n`;
+                text += output.traceback.join('\n');
+            }
+            // 4. 处理显示数据 (display_data) - 通常包含图片，但为了简单这里只转文本
+            else if (output.output_type === 'display_data' && output.data) {
+                if (output.data['text/plain']) {
+                     text += output.data['text/plain'].join('');
+                } else if (output.data['image/png']) {
+                    text += "[Output contains image data, skipped in text conversion]";
+                }
+            }
+
+            return normalizeLineEndings(text.trim());
+        }
+
+        // 规范化换行符
+        function normalizeLineEndings(str) {
+            return str.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        }
+
+        // 显示 Toast 提示
+        function showToast(message) {
+            toast.textContent = message;
+            toast.className = "show";
+            setTimeout(function(){ 
+                toast.className = toast.className.replace("show", ""); 
+            }, 3000);
+        }
+
+    </script>
+</body>
+</html>
