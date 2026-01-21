@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="en"><head>
   <meta name="viewport" content="width=device-width, initial-scale=1" /><meta charset="utf-8" />
-  <title>LLM Playground</title>
+  <title>AI Playground</title>
   <style>
     :root{--b:1px solid #000;--bg:#fff;--fg:#000;--h-bg:#eee;--s-w:250px;}
     body{margin:0;font-family:monospace,sans-serif;font-size:14px;background:var(--bg);color:var(--fg);display:flex;height:100vh;overflow:hidden;}
@@ -15,18 +15,18 @@
     #historyList .item span{flex-grow:1;overflow:hidden;text-overflow:ellipsis;}
     #historyList .del{cursor:pointer;padding:0 5px;font-weight:bold;}
     form label{display:block;margin:10px 0 5px;}
-    form input, form select, form textarea{width:100%;padding:5px;border:var(--b);background:var(--h-bg);}
+    form input,form select,form textarea{width:100%;box-sizing:border-box;padding:5px;border:var(--b);background:var(--h-bg);}
     .column{flex:1;display:flex;flex-direction:column;height:100%;padding:5px;gap:5px;}
-    .panel{display:flex;flex-direction:column;border:var(--b);background:var(--bg);}
+    .panel{display:flex;flex-direction:column;border:var(--b);background:var(--bg);min-height:0;overflow:hidden;}
     #systemPanel{height:25%;}
     #userPanel{flex:1;}
-    .panel-header{display:flex;justify-content:space-between;align-items:center;padding:2px 8px;font-weight:bold;border-bottom:var(--b);background:var(--h-bg);}
-    textarea, #output{flex-grow:1;padding:8px;border:none;resize:none;background:transparent;outline:none;font-family:inherit;font-size:inherit;}
-    #output{white-space:pre-wrap;overflow-y:auto;}
+    .panel-header{display:flex;justify-content:space-between;align-items:center;padding:2px 8px;font-weight:bold;border-bottom:var(--b);background:var(--h-bg);flex-shrink:0;}
+    textarea, #output{flex-grow:1;padding:8px;border:none;resize:none;background:transparent;outline:none;font-family:inherit;font-size:inherit;overflow-y:auto;}
+    #output{white-space:pre-wrap;}
     #output.md>:first-child{margin-top:0;}#output.md>:last-child{margin-bottom:0;}
     #output.md pre{background:#eee;padding:10px;border:var(--b);white-space:pre-wrap;word-break:break-all;}
     #output.md code{background:#eee;padding:0 2px;}#output.md pre code{background:transparent;padding:0;}
-    #resizer{height:5px;cursor:ns-resize;background:#ccc;border-top:var(--b);border-bottom:var(--b);}
+    #resizer{height:5px;cursor:ns-resize;background:#ccc;border-top:var(--b);border-bottom:var(--b);flex-shrink:0;}
     button{padding:5px 10px;border:var(--b);background:var(--h-bg);cursor:pointer;}
     button:active{background:#ccc;}
     #sidebarToggles{display:flex;flex-direction:column;justify-content:center;gap:5px;padding:0 5px;}
@@ -94,7 +94,7 @@
     <output>0.7</output>
     <label for="max_tokens">Max Tokens</label>
     <input id="max_tokens" type="number" placeholder="e.g., 4096">
-    <label><input id="stream" type="checkbox"> Stream</label>
+    <label><input id="stream" type="checkbox" checked> Stream</label>
   </form>
 </aside>
 <script>
@@ -114,7 +114,7 @@ var init=()=>{
   state.sessions=store('sessions')||{};
   loadSettings();loadParams();renderHistory();
   var lastId=store('lastSessionId');
-  if(lastId && state.sessions[lastId])loadSession(lastId); else newSession();
+  if(lastId&&state.sessions[lastId])loadSession(lastId);else newSession();
 };
 var saveState=()=>{store('settings',state.settings);store('params',state.params);store('sessions',state.sessions);store('lastSessionId',state.currentId);};
 
@@ -125,87 +125,55 @@ var loadSettings=()=>{
   $('autoSave').checked=state.settings.autoSave;
 };
 var saveSettings=()=>{
-  state.settings={
-    provider:$('provider').value,
-    endpoint:$('endpoint').value,
-    apiKey:$('apiKey').value,
-    autoSave:$('autoSave').checked
-  };
+  state.settings={provider:$('provider').value,endpoint:$('endpoint').value,apiKey:$('apiKey').value,autoSave:$('autoSave').checked};
   saveState();
 };
 var updateEndpoint=provider=>{
-  if(providerEndpoints[provider]) $('endpoint').value = providerEndpoints[provider];
+  var el=$('endpoint'),current=el.value;
+  if(providerEndpoints[provider]&&(!current||Object.values(providerEndpoints).includes(current)))el.value=providerEndpoints[provider];
   saveSettings();
 };
 
 var loadParams=()=>{
   $('model').value=state.params.model;
-  $('temperature').value=state.params.temperature;
-  $('temperature').nextElementSibling.value=state.params.temperature;
+  $('temperature').value=state.params.temperature;$('temperature').nextElementSibling.value=state.params.temperature;
   $('max_tokens').value=state.params.max_tokens;
   $('stream').checked=state.params.stream;
 };
 var saveParams=()=>{
-  state.params={
-    model:$('model').value,
-    temperature:parseFloat($('temperature').value),
-    max_tokens:parseInt($('max_tokens').value,10)||undefined,
-    stream:$('stream').checked
-  };
+  state.params={model:$('model').value,temperature:parseFloat($('temperature').value),max_tokens:parseInt($('max_tokens').value,10)||undefined,stream:$('stream').checked};
   saveState();
 };
 
 var newSession=()=>{
   state.currentId='session-'+Date.now();
-  $('systemPrompt').value='';
-  $('userPrompt').value='';
-  $('output').innerHTML='';
-  state.sessions[state.currentId]={system:'',user:'',assistant:''};
-  renderHistory();
-  saveState();
+  $('systemPrompt').value='';$('userPrompt').value='';$('output').innerHTML='';$('output').dataset.raw='';
+  state.sessions[state.currentId]={system:'',user:'',assistant:'',ts:Date.now()};
+  renderHistory();saveState();
 };
 var saveSession=()=>{
   if(!state.currentId)return;
-  var session={
-    system:$('systemPrompt').value,
-    user:$('userPrompt').value,
-    assistant:$('output').dataset.raw,
-    ts:Date.now()
-  };
-  state.sessions[state.currentId]=session;
-  renderHistory();
-  saveState();
+  var session={system:$('systemPrompt').value,user:$('userPrompt').value,assistant:$('output').dataset.raw,ts:Date.now()};
+  state.sessions[state.currentId]=session;renderHistory();saveState();
 };
 var loadSession=id=>{
   if(!state.sessions[id])return;
-  state.currentId=id;
-  var s=state.sessions[id];
-  $('systemPrompt').value=s.system;
-  $('userPrompt').value=s.user;
-  $('output').dataset.raw=s.assistant;
-  renderOutput();
-  renderHistory();
-  store('lastSessionId',id);
+  state.currentId=id;var s=state.sessions[id];
+  $('systemPrompt').value=s.system;$('userPrompt').value=s.user;$('output').dataset.raw=s.assistant;
+  renderOutput();renderHistory();store('lastSessionId',id);
 };
 var deleteSession=id=>{
-  event.stopPropagation();
-  if(!confirm(`Delete session?`))return;
+  event.stopPropagation();if(!confirm(`Delete session?`))return;
   delete state.sessions[id];
-  if(state.currentId===id)newSession();
-  else{renderHistory();saveState();}
+  if(state.currentId===id)newSession();else{renderHistory();saveState();}
 };
-
 var renderHistory=()=>{
-  var list=$('historyList');
-  list.innerHTML='';
+  var list=$('historyList');list.innerHTML='';
   Object.entries(state.sessions).sort((a,b)=>(b[1].ts||0)-(a[1].ts||0)).forEach(([id,s])=>{
-    var title=s.user.substring(0,25)||'New Session';
-    var item=document.createElement('div');
-    item.className='item';
+    var title=s.user.substring(0,25)||'New Session';var item=document.createElement('div');item.className='item';
     item.style.background=id===state.currentId?'#ccc':'transparent';
     item.innerHTML=`<span title="${s.user}">${title}</span><span class="del" onclick="deleteSession('${id}')">X</span>`;
-    item.onclick=()=>loadSession(id);
-    list.appendChild(item);
+    item.onclick=()=>loadSession(id);list.appendChild(item);
   });
 };
 
@@ -216,101 +184,75 @@ var setOutputView=mode=>{
   renderOutput();
 };
 var renderOutput=()=>{
-  var out=$('output');
-  var raw=out.dataset.raw||'';
-  if(state.view.outputMode==='md'){
-    out.className='md';
-    out.innerHTML=mdToHtml(raw);
-  }else{
-    out.className='txt';
-    out.textContent=raw;
-  }
+  var out=$('output'),raw=out.dataset.raw||'';
+  if(state.view.outputMode==='md'){out.className='md';out.innerHTML=mdToHtml(raw);}
+  else{out.className='txt';out.textContent=raw;}
+  out.scrollTop=out.scrollHeight;
 };
+var escapeHtml=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 var mdToHtml=text=>{
-  var escapeHtml=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  text=text.replace(/```([\s\S]*?)```/g,(m,c)=>`<pre><code>${escapeHtml(c.trim())}</code></pre>`);
-  text=text.replace(/`([^`]+)`/g,`<code>$1</code>`);
-  text=text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
-  text=text.replace(/\*(.*?)\*/g,'<em>$1</em>');
-  text=text.replace(/^# (.*$)/gim,'<h1>$1</h1>').replace(/^## (.*$)/gim,'<h2>$1</h2>').replace(/^### (.*$)/gim,'<h3>$1</h3>');
-  text=text.replace(/^\s*\n\* (.*)/gim, '<ul>\n<li>$1</li>\n</ul>').replace(/^\s*\n[0-9]\. (.*)/gim, '<ol>\n<li>$1</li>\n</ol>').replace(/(<\/ul>\n\s*<ul>)/g,'').replace(/(<\/ol>\n\s*<ol>)/g,'');
-  return text.split('\n').map(p=>p.trim()?'<p>'+p+'</p>':'').join('');
+  if(!text)return'';
+  return text.split(/(```[\s\S]*?```)/g).map((part,i)=>{
+    if(i%2===1)return`<pre><code>${escapeHtml(part.slice(3,-3).trim())}</code></pre>`;
+    part=part.replace(/^(#+) (.*)/gm,(m,h,c)=>`<h${h.length}>${c}</h${h.length}>`)
+      .replace(/^((?:\* .*(?:\n|$))+)/gm,m=>`<ul>${m.replace(/^\* (.*)/gm,'<li>$1</li>')}</ul>`)
+      .replace(/^((?:^\d+\. .*(?:\n|$))+)/gm,m=>`<ol>${m.replace(/^\d+\. (.*)/gm,'<li>$1</li>')}</ol>`)
+      .replace(/<\/ul>\n<ul>/g,'').replace(/<\/ol>\n<ol>/g,'')
+      .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>').replace(/`([^`]+)`/g,`<code>$1</code>`);
+    return part.trim().split(/\n{2,}/).map(block=>{
+      if(!block)return'';
+      if(/^<(?:h\d|ul|ol)>/.test(block))return block;
+      return`<p>${block.replace(/\n/g,'<br>')}</p>`;
+    }).join('');
+  }).join('');
 };
 
 var buildRequest=()=>{
-  var {provider,endpoint,apiKey}=state.settings;
-  var {model,temperature,max_tokens,stream}=state.params;
-  var system=$('systemPrompt').value, user=$('userPrompt').value;
-  var headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`};
-  var body;
-  if(provider==='openai'){
-    var messages=[{role:'user',content:user}];
-    if(system)messages.unshift({role:'system',content:system});
-    body={model,messages,temperature,max_tokens,stream};
-  }else if(provider==='anthropic'){
-    headers['x-api-key']=apiKey;
-    headers['anthropic-version']='2023-06-01';
-    body={model,system,messages:[{role:'user',content:user}],temperature,max_tokens,stream};
-  }else if(provider==='gemini'){
-    var contents=[{role:'user',parts:[{text:user}]}];
-    if(system)contents.unshift({role:'system',parts:[{text:system}]});
-    body={contents,generationConfig:{temperature,maxOutputTokens:max_tokens}};
-    endpoint+=`?key=${apiKey}`; // Gemini uses API key in URL for REST
-  }
+  var{provider,endpoint,apiKey}=state.settings;var{model,temperature,max_tokens,stream}=state.params;
+  var system=$('systemPrompt').value,user=$('userPrompt').value;
+  var headers={'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},body;
+  if(provider==='openai'){body={model,messages:[...(system?[{role:'system',content:system}]:[]),{role:'user',content:user}],temperature,max_tokens,stream};
+  }else if(provider==='anthropic'){headers['x-api-key']=apiKey;headers['anthropic-version']='2023-06-01';body={model,system,messages:[{role:'user',content:user}],temperature,max_tokens,stream};
+  }else if(provider==='gemini'){body={contents:[...(system?[{role:'system',parts:[{text:system}]}]:[]),{role:'user',parts:[{text:user}]}],generationConfig:{temperature,maxOutputTokens:max_tokens}};endpoint+=`?key=${apiKey}`;}
   return{url:endpoint,options:{method:'POST',headers,body:JSON.stringify(body),signal:controller.signal}};
 };
-
 var sendRequest=async()=>{
-  if(controller)controller.abort();
-  controller=new AbortController();
-  var out=$('output'), {stream}=state.params;
-  out.textContent='...';
-  out.dataset.raw='';
+  if(controller)controller.abort();controller=new AbortController();
+  var out=$('output');out.dataset.raw='';renderOutput();
   try{
-    var {url,options}=buildRequest();
-    var res=await fetch(url,options);
+    var{url,options}=buildRequest();var res=await fetch(url,options);
     if(!res.ok)throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    if(!stream||!res.body){var data=await res.json();out.dataset.raw=data.choices[0].message.content;renderOutput();return;}
-
-    var reader=res.body.getReader(), decoder=new TextDecoder();
+    if(!state.params.stream||!res.body){var data=await res.json();out.dataset.raw=data.choices[0].message.content;renderOutput();return;}
+    var reader=res.body.getReader(),decoder=new TextDecoder();
     while(true){
-      var {done,value}=await reader.read();
-      if(done)break;
-      var chunk=decoder.decode(value);
+      var{done,value}=await reader.read();if(done)break;
+      var chunk=decoder.decode(value,{stream:true});
       var lines=chunk.split('\n').filter(l=>l.startsWith('data: '));
       for(var line of lines){
-        var data=line.substring(6);
-        if(data==='[DONE]')break;
+        var data=line.substring(6);if(data==='[DONE]')break;
         try{
-          var json=JSON.parse(data);
-          var delta='';
+          var json=JSON.parse(data),delta='';
           if(state.settings.provider==='openai')delta=json.choices[0]?.delta?.content||'';
           else if(state.settings.provider==='anthropic')delta=json.delta?.text||'';
-          else if(state.settings.provider==='gemini')delta=json.candidates[0]?.content.parts[0].text||'';
+          else if(state.settings.provider==='gemini')delta=json.candidates?.[0]?.content.parts[0].text||'';
           if(delta){out.dataset.raw+=delta;renderOutput();}
         }catch(e){/* Malformed JSON chunk, ignore */}
       }
     }
-  }catch(e){if(e.name!=='AbortError')out.dataset.raw=e.toString();renderOutput();}finally{
-    if(state.settings.autoSave)saveSession();
-  }
+  }catch(e){if(e.name!=='AbortError')out.dataset.raw=e.toString();renderOutput();}
+  finally{if(state.settings.autoSave)saveSession();}
 };
 
 var toggleSidebar=side=>{
-  var bar=side==='left'?$('leftSidebar'):$('rightSidebar');
-  bar.classList.toggle('collapsed');
+  var bar=$(side==='left'?'leftSidebar':'rightSidebar');bar.classList.toggle('collapsed');
   var btn=document.querySelector(`#sidebarToggles button:nth-child(${side==='left'?1:2})`);
   btn.textContent=bar.classList.contains('collapsed')?(side==='left'?'>':'<'):(side==='left'?'<':'>');
 };
-
-var resizer=$('resizer'),systemPanel=$('systemPanel');
 var initDrag=e=>{
-  e.preventDefault();
-  var startY=e.clientY,startHeight=systemPanel.offsetHeight;
-  var doDrag=e=>{systemPanel.style.height=(startHeight+e.clientY-startY)+'px';};
+  e.preventDefault();var startY=e.clientY,startHeight=$('systemPanel').offsetHeight;
+  var doDrag=e=>{var newHeight=startHeight+e.clientY-startY;if(newHeight>20&&newHeight<e.target.parentElement.offsetHeight-20)$('systemPanel').style.height=newHeight+'px';};
   var stopDrag=()=>{document.removeEventListener('mousemove',doDrag);document.removeEventListener('mouseup',stopDrag);};
-  document.addEventListener('mousemove',doDrag);
-  document.addEventListener('mouseup',stopDrag);
+  document.addEventListener('mousemove',doDrag);document.addEventListener('mouseup',stopDrag);
 };
 init();
 </script>
