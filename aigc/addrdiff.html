@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>地址分词对比</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/latex.css@1.14.0/style.min.css">
+<style>
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1em}
+@media(max-width:750px){.grid2{grid-template-columns:1fr}}
+textarea{width:100%;min-height:8em}
+.diff-box{min-height:2em;padding:.5em;border:1px solid #bbb;border-radius:3px;margin-top:.3em;line-height:1.8}
+.ua{color:red;text-decoration:underline;font-weight:bold}
+.ub{color:green;text-decoration:underline;font-weight:bold}
+.ai-row{display:flex;gap:.5em;flex-wrap:wrap;align-items:end}
+.ai-row>div{flex:1;min-width:140px}
+.ai-row>div:last-child{flex:0}
+.ai-row input{width:100%}
+.ok{color:green;font-weight:bold}
+.ng{color:red;font-weight:bold}
+#wasm-st{font-style:italic;color:gray}
+</style>
+</head>
+<body>
+<header>
+<h1>地址分词对比</h1>
+<p id="wasm-st">wasm 加载中, 请稍候…</p>
+</header>
+<main>
+<label for="preset">预置示例</label>
+<select id="preset" onchange="loadPreset(this.value)">
+<option value="">-- 请选择 --</option>
+<option value="0">门牌号差一位（清华某教室）</option>
+<option value="1">门牌号中文数字vs阿拉伯数字（北大某教室）</option>
+<option value="2">简称（人大附中 vs 中国人民大学附属中学）</option>
+</select>
+<div class="grid2">
+<div>
+<label for="verA">版本甲</label>
+<textarea id="verA" oninput="onInput('A')"></textarea>
+<div id="diffA" class="diff-box"></div>
+</div>
+<div>
+<label for="verB">版本乙</label>
+<textarea id="verB" oninput="onInput('B')"></textarea>
+<div id="diffB" class="diff-box"></div>
+</div>
+</div>
+<fieldset>
+<legend>AI 判断（BYOK）</legend>
+<div class="ai-row">
+<div><label for="aiBase">API Base</label><input id="aiBase" placeholder="https://api.openai.com/v1"></div>
+<div><label for="aiKey">API Key</label><input id="aiKey" type="password" placeholder="sk-…"></div>
+<div><label for="aiModel">Model</label><input id="aiModel" placeholder="gpt-4o-mini"></div>
+<div><button onclick="aiJudge()">AI 判断</button></div>
+</div>
+<div id="aiRes"></div>
+<p><small>AI可能出错,请人工二审!</small></p>
+</fieldset>
+</main>
+<footer><hr>
+<p>Powered by <a href="https://github.com/cxumol/jieba-wasm-html">jieba-wasm-html</a></p>
+</footer>
+<script>
+var $=id=>document.getElementById(id);
+var presets=[
+  ["清华大学紫荆公寓6号楼302室","清华大学紫荆公寓6号楼303室"],
+  ["北京大学理科教学楼二零一室","北京大学理科教学楼201室"],
+  ["人大附中","中国人民大学附属中学"]
+];
+var ready=false,cutFn=null;
+
+// 持久化 AI 凭据
+["aiBase","aiKey","aiModel"].forEach(k=>{$(k).value=localStorage.getItem(k)||"";$(k).oninput=()=>localStorage.setItem(k,$(k).value);});
+
+// 加载 wasm
+(async()=>{
+  var{default:init,cut}=await import("https://cdn.jsdelivr.net/gh/cxumol/jieba-wasm-html@gh-pages/jieba_rs_wasm.js");
+  await init();cutFn=cut;ready=true;
+  $("wasm-st").textContent="wasm 就绪";
+  onInput("A");onInput("B");
+})();
+
+// 从 URL 恢复
+(function(){
+  var p=new URLSearchParams(location.search);
+  if(p.has("verA"))$("verA").value=p.get("verA");
+  if(p.has("verB"))$("verB").value=p.get("verB");
+})();
+
+function syncURL(s){
+  var p=new URLSearchParams(location.search);
+  p.set(s==="A"?"verA":"verB",$(s==="A"?"verA":"verB").value);
+  history.replaceState(null,"",location.pathname+"?"+p.toString());
+}
+
+function onInput(side){
+  syncURL(side);
+  if(!ready) return;
+  var a=$("verA").value.trim(),b=$("verB").value.trim();
+  if(!a||!b){$("diffA").innerHTML="";$("diffB").innerHTML="";return;}
+  var wA=cutFn(a,true),wB=cutFn(b,true);
+  var sA=new Set(wA),sB=new Set(wB);
+  var dA=new Set(wA.filter(x=>!sB.has(x)));
+  var dB=new Set(wB.filter(x=>!sA.has(x)));
+  $("diffA").innerHTML="<p>"+wA.map(w=>dA.has(w)?`<span class="ua">${w}</span>`:w).join(" | ")+"</p>";
+  $("diffB").innerHTML="<p>"+wB.map(w=>dB.has(w)?`<span class="ub">${w}</span>`:w).join(" | ")+"</p>";
+}
+
+function loadPreset(i){
+  if(i==="") return;
+  var[a,b]=presets[+i];$("verA").value=a;$("verB").value=b;
+  onInput("A");onInput("B");
+}
+
+async function aiJudge(){
+  var a=$("verA").value.trim(),b=$("verB").value.trim();
+  if(!a||!b){$("aiRes").innerHTML='<p style="color:gray">请先填写两个版本</p>';return;}
+  var base=$("aiBase").value.trim(),key=$("aiKey").value.trim(),model=$("aiModel").value.trim();
+  if(!base||!model){$("aiRes").innerHTML='<p style="color:gray">请填写 API Base、Key、Model</p>';return;}
+  $("aiRes").innerHTML='<p style="color:gray">判断中…</p>';
+  var wA=cutFn(a,true),wB=cutFn(b,true);
+  var sA=new Set(wA),sB=new Set(wB);
+  var dAW=[...new Set(wA.filter(x=>!sB.has(x)))];
+  var dBW=[...new Set(wB.filter(x=>!sA.has(x)))];
+  try{
+    var res=await fetch(base+"/chat/completions",{method:"POST",headers:Object.assign({"Content-Type":"application/json"},key?{"Authorization":"Bearer "+key}:{}),body:JSON.stringify({model,messages:[ //,"thinking":{"type":"disabled"},"enable_thinking":false
+      {role:"system",content:'你是顺丰物流的相同地址判别器, 能准确判断给定的两个字符串是否指向同一地址｡ 你只会根据输入, 输出 {"isSameAddress":true} 或 {"isSameAddress":false}. ONLY Return a json object.'},
+      {role:"user",content:JSON.stringify({rawA:a,rawB:b,diffA:dAW,diffB:dBW})}
+    ]})});
+    var json=await res.json();
+    var isFalse=json.choices[0].message.content.toUpperCase().includes("FALSE");
+    $("aiRes").innerHTML=isFalse?'<p class="ng">相异</p>':'<p class="ok">相同</p>';
+  }catch(e){$("aiRes").innerHTML=`<p style="color:gray">请求失败: ${e}</p>`;}
+}
+</script>
+</body>
+</html>
